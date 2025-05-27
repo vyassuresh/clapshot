@@ -1,4 +1,4 @@
-FROM rust:1.80-slim-bookworm AS rust-bookworm-slim
+FROM rust:1.87-slim-bookworm AS rust-bookworm-slim
 
 # ----------------------------------
 
@@ -23,8 +23,8 @@ USER root
 # Add deb-multimedia repository (for a more recent ffmpeg)
 RUN apt-get -qy update
 RUN apt-get -qy install gnupg2 wget
-RUN wget -q https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb
-RUN dpkg -i deb-multimedia-keyring_2016.8.1_all.deb
+RUN wget -q https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2024.9.1_all.deb
+RUN dpkg -i deb-multimedia-keyring_2024.9.1_all.deb
 RUN echo "deb https://www.deb-multimedia.org bookworm main non-free" > /etc/apt/sources.list.d/deb-multimedia.list
 RUN apt-get -qy update
 
