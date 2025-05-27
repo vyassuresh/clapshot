@@ -30,7 +30,7 @@ TARGET_BIN := $(VENV)/bin/clapshot-organizer-basic-folders
 
 $(TARGET_BIN): $(VENV) $(PY_SRC) $(VENV)/bin/mypy
 	$(VENV)/bin/mypy organizer
-	$(PIP) install .
+	$(PIP) install --no-build-isolation .
 
 $(VENV)/bin/mypy: $(VENV)
 	@$(PIP) install mypy==1.9.0

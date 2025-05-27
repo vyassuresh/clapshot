@@ -25,8 +25,9 @@ setup(
     cmdclass={
         'install': CustomInstall,
     },
-    entry_points='''
-        [console_scripts]
-        clapshot-organizer-basic-folders=organizer.main:main
-    ''',
+    entry_points={
+        'console_scripts': [
+            'clapshot-organizer-basic-folders=organizer.main:main',
+        ],
+    },
 )
