@@ -17,7 +17,7 @@ export let mediaFileAddedAction: string|undefined;
 let progressBar: HTMLProgressElement;
 let statusTxt: string = "";
 let uploadingNow: boolean = false;
-let form: HTMLFormElement;
+let form: HTMLFormElement | undefined;
 
 function afterUpload()
 {

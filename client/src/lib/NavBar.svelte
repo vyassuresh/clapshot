@@ -111,7 +111,7 @@ function addEDLComments(event: any) {
 						<Dropdown class="w-64 text-sm">
 							<DropdownItem on:click={copyToClipboard}><i class="fas fa-share-square"></i> Share to logged in users</DropdownItem>
 							{#if $curVideo?.origUrl}
-								<DropdownItem href="{$curVideo?.origUrl}" download title="Download original file"><i class="fas fa-download"></i> Download original</DropdownItem>
+								<DropdownItem href="{$curVideo?.origUrl}" title="Download original file"><a href="{$curVideo?.origUrl}" download><i class="fas fa-download"></i> Download original</a></DropdownItem>
 							{/if}
 							{#if $collabId}
 								<DropdownItem href="?vid={$mediaFileId}" class="text-green-400"><i class="fas fa-users"></i> Leave collaborative Session</DropdownItem>
