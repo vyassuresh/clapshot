@@ -1,10 +1,6 @@
 use std::{path::PathBuf, sync::{Arc, atomic::AtomicBool}, fmt::Debug};
 use anyhow::Context;
-use tonic::{body::BoxBody, server::NamedService};
-use warp::http;
-use warp::hyper::Body;
-use std::{ convert::Infallible, time::Duration, sync::atomic::Ordering::Relaxed };
-use tower::Service;
+use std::{ time::Duration, sync::atomic::Ordering::Relaxed };
 
 pub mod subprocess;
 pub mod unix_socket;
@@ -55,34 +51,19 @@ impl Debug for GrpcBindAddr {
     }
 }
 
-/// Run a gRPC server.
-///
-/// # Arguments
-///
-/// * `bind` - The address to bind to.
-/// * `service` - The service to serve.
-/// * `span` - The tracing span to use for logging.
-/// * `server_listening_flag` - Set to true when the server is ready to accept connections.
-/// * `terminate_flag` - A flag that will be checked periodically. When set to true, the server will exit.
-pub async fn run_grpc_server<S>(
+/// Run a gRPC server for organizer outbound service.
+pub async fn run_organizer_outbound_grpc_server(
     bind: GrpcBindAddr,
-    service: S,
+    service: proto::org::organizer_outbound_server::OrganizerOutboundServer<impl proto::org::organizer_outbound_server::OrganizerOutbound>,
     span: tracing::Span,
     server_listening_flag: Arc<AtomicBool>,
     terminate_flag: Arc<AtomicBool>) -> anyhow::Result<()>
-where
-    S: Service<http::Request<Body>, Response = http::Response<BoxBody>, Error = Infallible>
-        + NamedService
-        + Clone
-        + Send
-        + 'static,
-    S::Future: Send + 'static,
 {
     span.in_scope(|| { tracing::debug!("Binding to '{:?}'", bind) });
 
     let refl = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
-        .build()?;
+        .build_v1()?;
 
     let srv = tonic::transport::Server::builder()
         .add_service(refl)
@@ -168,7 +149,11 @@ pub async fn connect_back_and_finish_handshake(
                     .map_err(|e| Status::invalid_argument(format!("Failed to parse org->srv URI: {:?}", e)))?
                     .connect_timeout(std::time::Duration::from_secs(8))
                     .connect_with_connector(service_fn(move |_: Uri| {
-                        UnixStream::connect(path.clone()) })).await {
+                        let path = path.clone();
+                        async move {
+                            UnixStream::connect(path).await.map(hyper_util::rt::tokio::TokioIo::new)
+                        }
+                    })).await {
                     Ok(c) => {
                         tracing::debug!("Connected back to server (on attempt {retry}/{MAX_RETRIES})");
                         Some(c) },

@@ -132,7 +132,7 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
         [stillwave] loop=loop=-1:size=1:start=0, fps=30, trim=duration={DURATION} [stillwave_loop]; \
         [stillwave_loop][cursor] overlay=(W*t)/({DURATION}):0:shortest=1 [progress]; \
         \
-        [progress] format=yuv420p [out];", DURATION=&src.duration);
+        [progress] format=yuv420p [out]", DURATION=&src.duration);
 
 
     let ffmpeg_options: Vec<String> = match src.media_type {

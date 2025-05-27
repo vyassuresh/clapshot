@@ -4,9 +4,7 @@ use lib_clapshot_grpc::{unix_socket, subprocess::spawn_shell, subprocess::ProcHa
 use lib_clapshot_grpc::proto::org::organizer_inbound_client::OrganizerInboundClient;
 
 use anyhow::{Context, bail};
-use tokio::net::UnixStream;
-use tonic::transport::{Endpoint, Uri, Channel};
-use tower::service_fn;
+use tonic::transport::{Endpoint, Channel};
 use tracing::info_span;
 
 
@@ -26,11 +24,30 @@ pub async fn connect(uri: OrganizerURI) -> anyhow::Result<OrganizerConnection>
         OrganizerURI::UnixSocket(path) =>
         {
             unix_socket::wait_for(&path, 5.0).await?;
-            Endpoint::try_from("file://dummy")?
-                .connect_timeout(std::time::Duration::from_secs(8))
-                .connect_with_connector(service_fn(move |_: Uri| {
-                    UnixStream::connect(path.clone()) })).await
-                .context("UnixStream::connect failed")?
+            // For tonic 0.13.1, create a custom connector that wraps UnixStream
+            #[cfg(unix)]
+            {
+                use tokio::net::UnixStream;
+                use tower::service_fn;
+                use hyper_util::rt::TokioIo;
+                
+                let path_clone = path.clone();
+                Endpoint::try_from("http://[::]:50051")?
+                    .connect_timeout(std::time::Duration::from_secs(8))
+                    .connect_with_connector(service_fn(move |_: tonic::transport::Uri| {
+                        let path = path_clone.clone();
+                        async move {
+                            let stream = UnixStream::connect(path).await?;
+                            Ok::<_, std::io::Error>(TokioIo::new(stream))
+                        }
+                    }))
+                    .await
+                    .context("UnixSocket::connect failed")?
+            }
+            #[cfg(not(unix))]
+            {
+                anyhow::bail!("Unix sockets are not supported on this platform")
+            }
         },
         OrganizerURI::Http(uri) =>
         {

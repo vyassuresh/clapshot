@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .file_descriptor_set_path(&descriptor_path)
         .compile_well_known_types(true)
         .extern_path(".google.protobuf", "::pbjson_types")
-        .compile(&proto_files, &[root.clone()])
+        .compile_protos(&proto_files, &[root.clone()])
         .unwrap();
 
     let descriptor_set = std::fs::read(descriptor_path)?;
