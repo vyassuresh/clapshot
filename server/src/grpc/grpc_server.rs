@@ -5,7 +5,7 @@ use crate::{api_server::{server_state::ServerState, ws_handers::del_media_file_a
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::database::models;
 
-use lib_clapshot_grpc::{proto::{self}, run_grpc_server, GrpcBindAddr, RpcResult};
+use lib_clapshot_grpc::{proto::{self}, run_organizer_outbound_grpc_server, GrpcBindAddr, RpcResult};
 use lib_clapshot_grpc::proto::org;
 
 pub struct OrganizerOutboundImpl {
@@ -290,7 +290,7 @@ pub async fn run_org_to_srv_grpc_server(bind: GrpcBindAddr, server: ServerState)
 
     let service = org::organizer_outbound_server::OrganizerOutboundServer::new(OrganizerOutboundImpl { server });
 
-    run_grpc_server(bind, service, span, server_listening_flag, terminate_flag).await
+    run_organizer_outbound_grpc_server(bind, service, span, server_listening_flag, terminate_flag).await
 }
 
 pub fn make_grpc_server_bind(tcp: &Option<String>, data_dir: &Path) -> anyhow::Result<GrpcBindAddr>
