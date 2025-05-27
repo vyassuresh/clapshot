@@ -1,0 +1,2 @@
+This folder contains old/alternative ideas and WIP stuff - nothing actually
+implemented.

@@ -82,7 +82,13 @@ pub struct UserMessage {
 }
 
 fn abbrv(msg: &str) -> String {
-    if msg.len() > 200 { msg[..200].to_string() + " (...)" } else { msg.to_string() }
+    let char_indices: Vec<_> = msg.char_indices().take(201).collect();
+    if char_indices.len() > 200 {
+        let truncate_at = char_indices[200].0;
+        msg[..truncate_at].to_string() + " (...)"
+    } else {
+        msg.to_string()
+    }
 }
 
 

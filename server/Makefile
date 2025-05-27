@@ -75,14 +75,22 @@ test-local:
 	@echo "---------- Testing Organizer ----------"
 	@# Run Organizer tests through Server (so it tests database and gRPC realistically).
 	@# The `cargo test test_organizer` writes the log to a file, so we'll create a temp file for it.
-	@LOGFILE=$$(mktemp -u); \
+	@LOGFILE=$$(mktemp); \
+	tail_pid=""; \
+	cleanup() { \
+		if [ -n "$$tail_pid" ] && kill -0 "$$tail_pid" 2>/dev/null; then \
+			kill "$$tail_pid" 2>/dev/null || true; \
+		fi; \
+		rm -f "$$LOGFILE" 2>/dev/null || true; \
+	}; \
+	trap cleanup EXIT INT TERM; \
 	tail -F "$$LOGFILE" 2>/dev/null & tail_pid=$$!; \
 	set -o pipefail; \
 	TEST_ORG_CMD="../organizer/basic_folders/run-py-org.sh" \
 	TEST_ORG_LOG="$$LOGFILE" \
-	cargo test test_organizer | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)" || { status=$$?; kill $$tail_pid; rm "$$LOGFILE"; exit $$status; }; \
-	kill $$tail_pid 2>/dev/null; \
-	rm -f -- "$$LOGFILE"
+	cargo test test_organizer | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)" || exit_code=$$?; \
+	cleanup; \
+	exit $${exit_code:-0}
 
 
 test-docker: docker

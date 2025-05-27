@@ -2,7 +2,6 @@ use anyhow::bail;
 use tracing::{info, warn, error, info_span, debug};
 use strip_ansi_escapes;
 use wait_timeout::ChildExt;
-use std::os::fd::FromRawFd;
 use std::os::unix::prelude::CommandExt;
 use std::time::Duration;
 
@@ -52,16 +51,17 @@ pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Re
     debug!("Spawning (shell cmd): {:?}", cmd);
     let mut child = cmd.spawn()?;
 
-    /// Streams logs from a file descriptor (stdout/stderr of childprocess) to the main log.
+    /// Streams logs from a child process stream (stdout/stderr) to the main log.
     ///
-    /// This is a bit convoluted because we can't block on the stdin/stdout streams,
-    /// otherwise the reader.read_line() would hang when the subprocess is done, and the thread would never exit.
-    fn log_stream(span: tracing::Span, fd: i32, level: tracing::Level, name: &str, terminate: Arc<AtomicBool>) {
+    /// This uses polling to avoid blocking reads that would hang when the subprocess terminates.
+    /// The stream object is moved into this function to ensure proper ownership of the file descriptor.
+    fn log_stream<T: std::io::Read + AsRawFd>(span: tracing::Span, stream: T, level: tracing::Level, name: &str, terminate: Arc<AtomicBool>) {
         debug!("Starting thread to read {}->log", name);
         let _entered = span.enter();
         use std::io::BufRead;
 
-        let mut reader = std::io::BufReader::new(unsafe { std::fs::File::from_raw_fd(fd) });
+        let fd = stream.as_raw_fd();
+        let mut reader = std::io::BufReader::new(stream);
         let mut buffer = String::new();
         let mut poll = Poll::new().unwrap();
         let mut events = Events::with_capacity(128);
@@ -131,12 +131,12 @@ pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Re
         if let Some(stdout) = child.stdout.take() {
                 let span = span.clone();
                 let terminate_flag = terminate_flag.clone();
-                std::thread::spawn(move || log_stream(span, stdout.as_raw_fd(), tracing::Level::INFO, "", terminate_flag))
+                std::thread::spawn(move || log_stream(span, stdout, tracing::Level::INFO, "", terminate_flag))
             } else { bail!("Failed to capture stdout"); },
         if let Some(stderr) = child.stderr.take() {
                 let span = span.clone();
                 let terminate_flag = terminate_flag.clone();
-                std::thread::spawn(move || log_stream(span, stderr.as_raw_fd(), tracing::Level::ERROR, "stderr", terminate_flag))
+                std::thread::spawn(move || log_stream(span, stderr, tracing::Level::ERROR, "stderr", terminate_flag))
             } else { bail!("Failed to capture stderr"); }
     ];
 
