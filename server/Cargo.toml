@@ -72,7 +72,7 @@ serde = "1.0.160"
 diesel_migrations = "2.0.0"
 chrono = { version = "0.4.24", features = ["serde"] }
 warp = "0.3.4"
-tokio = { version = "1.28.0", features = ["full"] }
+tokio = { version = "1.38.2", features = ["full"] }
 tokio-stream = "0.1.13"
 data-url = "0.3.1"
 base64 = "0.22.1"
