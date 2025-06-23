@@ -1084,6 +1084,407 @@ async def org_test__admin_owner_transfer(oi: organizer.OrganizerInbound):
         assert media_owners[v.id] == v.user_id
 
 
+async def org_test__admin_open_other_user_folder(oi: organizer.OrganizerInbound):
+    """
+    Test that administrators can double-click (open) another user's folder from the all users folder listing view.
+    This regression test ensures the open_folder command works correctly for administrators accessing other users' folders.
+    """
+    # Create two users - one regular user and one admin
+    with oi.db_new_session() as dbs:
+        regular_user_id = "admin.test.regular"
+        admin_user_id = "admin.test.admin"
+        dbs.add(DbUser(id=regular_user_id, name="Regular User"))
+        dbs.add(DbUser(id=admin_user_id, name="Admin User"))
+        dbs.commit()
+
+    # Create sessions for both users
+    regular_ses = org.UserSessionData(
+        sid="regular_sid",
+        user=clap.UserInfo(id=regular_user_id, name="Regular User"),
+        is_admin=False,
+        cookies={}
+    )
+
+    admin_ses = org.UserSessionData(
+        sid="admin_sid", 
+        user=clap.UserInfo(id=admin_user_id, name="Admin User"),
+        is_admin=True,
+        cookies={}
+    )
+
+    # Create root folders for both users and add some content to regular user's folder
+    with oi.db_new_session() as dbs:
+        regular_root = await db_get_or_create_user_root_folder(dbs, regular_ses.user, oi.srv, oi.log)
+        admin_root = await db_get_or_create_user_root_folder(dbs, admin_ses.user, oi.srv, oi.log)
+        
+        # Create a test folder in regular user's space
+        test_folder = await oi.folders_helper.create_folder(dbs, regular_ses, regular_root, "Regular User's Test Folder")
+        regular_root_id = regular_root.id
+        test_folder_id = test_folder.id
+        dbs.commit()
+
+    # Admin navigates to main page - should see all users' folders in admin view
+    admin_page = await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=admin_ses))
+    assert isinstance(admin_page, org.ClientShowPageRequest)
+    
+    # Verify admin can see the regular user's folder in the listing
+    # The _admin_show_all_user_homes function should have added a folder listing with user folders
+    folder_listings = [item.folder_listing for item in admin_page.page_items if item.folder_listing]
+    assert len(folder_listings) > 0, "Admin should see folder listings"
+    
+    # Find the all-users folder listing (should be the second one after the admin's own content)
+    admin_user_listing = None
+    for listing in folder_listings:
+        if listing.listing_data and listing.listing_data.get("folder_id"):
+            # Look for items with user folders
+            for item in listing.items:
+                if item.folder and item.folder.title == regular_user_id:
+                    admin_user_listing = listing
+                    break
+    
+    assert admin_user_listing is not None, "Admin should see other users' folders in listing"
+
+    # Test: Admin double-clicks (opens) the regular user's folder
+    # This simulates clicking on the regular user's folder from the all users view
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=admin_ses,
+        cmd="open_folder", 
+        args=json.dumps({"id": regular_root_id})
+    ))
+
+    # Verify admin can see the contents of regular user's folder
+    # Get updated folder path - should now include regular user's root folder
+    folder_path, _ = await oi.folders_helper.get_current_folder_path(admin_ses)
+    assert len(folder_path) >= 1, "Admin should have a valid folder path"
+    current_folder = folder_path[-1]
+    assert current_folder.id == regular_root_id, "Admin should now be viewing regular user's root folder"
+    assert current_folder.user_id == regular_user_id, "Current folder should belong to regular user"
+
+    # Verify admin can fetch contents of regular user's folder
+    contents = await oi.folders_helper.fetch_folder_contents(current_folder, admin_ses)
+    assert len(contents) == 1, "Regular user's folder should contain the test folder"
+    assert contents[0].id == test_folder_id, "Should see the test folder created earlier"
+    assert isinstance(contents[0], DbFolder), "Content should be a folder"
+    assert contents[0].title == "Regular User's Test Folder", "Should see correct folder title"
+
+    # Test: Admin can navigate deeper into regular user's folder structure
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=admin_ses,
+        cmd="open_folder",
+        args=json.dumps({"id": test_folder_id})  
+    ))
+
+    # Verify admin can navigate to subfolder
+    folder_path, _ = await oi.folders_helper.get_current_folder_path(admin_ses)
+    assert len(folder_path) >= 2, "Admin should have deeper folder path"
+    current_folder = folder_path[-1]
+    assert current_folder.id == test_folder_id, "Admin should now be viewing the test subfolder"
+    assert current_folder.user_id == regular_user_id, "Subfolder should still belong to regular user"
+
+    # Verify admin can fetch contents of the subfolder (should be empty)
+    contents = await oi.folders_helper.fetch_folder_contents(current_folder, admin_ses)
+    assert len(contents) == 0, "Test subfolder should be empty"
+
+    print("✓ Admin successfully opened and navigated another user's folder structure")
+
+
+async def org_test__corrupted_folder_path_cookie(oi: organizer.OrganizerInbound):
+    """
+    Test handling of corrupted folder path cookies - ensures robust fallback behavior.
+    """
+    ses, root_fld = await _create_test_folder_and_session(oi)
+    
+    # Test 1: Malformed JSON in cookie
+    ses.cookies[PATH_COOKIE_NAME] = "invalid json{"
+    folder_path, _ = await oi.folders_helper.get_current_folder_path(ses)
+    assert len(folder_path) == 1, "Should fall back to root folder on malformed JSON"
+    assert folder_path[0].id == root_fld.id, "Should return user's root folder"
+    
+    # Test 2: Non-existent folder IDs in cookie
+    ses.cookies[PATH_COOKIE_NAME] = json.dumps([99999, 88888])
+    folder_path, _ = await oi.folders_helper.get_current_folder_path(ses)
+    assert len(folder_path) == 1, "Should fall back to root folder on non-existent IDs"
+    assert folder_path[0].id == root_fld.id, "Should return user's root folder"
+    
+    # Test 3: Mixed ownership in cookie (non-admin user)
+    # Create another user and their folder
+    with oi.db_new_session() as dbs:
+        other_user_id = "corrupt.test.other"
+        dbs.add(DbUser(id=other_user_id, name="Other User"))
+        dbs.commit()
+    
+    other_ses = org.UserSessionData(
+        sid="other_sid",
+        user=clap.UserInfo(id=other_user_id, name="Other User"),
+        is_admin=False,
+        cookies={}
+    )
+    
+    with oi.db_new_session() as dbs:
+        other_root = await db_get_or_create_user_root_folder(dbs, other_ses.user, oi.srv, oi.log)
+        other_root_id = other_root.id
+        dbs.commit()
+    
+    # Set cookie with mixed ownership (user's folder + other user's folder)
+    ses.cookies[PATH_COOKIE_NAME] = json.dumps([root_fld.id, other_root_id])
+    folder_path, _ = await oi.folders_helper.get_current_folder_path(ses)
+    assert len(folder_path) == 1, "Should clear mixed ownership path and fall back to root"
+    assert folder_path[0].id == root_fld.id, "Should return user's root folder"
+    
+    # Verify cookie was cleared
+    assert ses.cookies.get(PATH_COOKIE_NAME) != json.dumps([root_fld.id, other_root_id]), "Cookie should have been cleared"
+    
+    print("✓ Corrupted folder path cookie handling works correctly")
+
+
+async def org_test__open_nonexistent_folder(oi: organizer.OrganizerInbound):
+    """
+    Test opening a folder that doesn't exist - ensures proper error handling.
+    """
+    ses, _ = await _create_test_folder_and_session(oi)
+    
+    # Test opening non-existent folder
+    try:
+        await oi.cmd_from_client(org.CmdFromClientRequest(
+            ses=ses, 
+            cmd="open_folder", 
+            args=json.dumps({"id": 99999})
+        ))
+        assert False, "Should have raised NOT_FOUND error for non-existent folder"
+    except GRPCError as e:
+        assert e.status == GrpcStatus.NOT_FOUND, f"Expected NOT_FOUND, got {e.status}"
+        assert "not found" in str(e.message).lower(), "Error message should mention folder not found"
+    
+    # Test with invalid folder ID type (should be caught by validation)
+    try:
+        await oi.cmd_from_client(org.CmdFromClientRequest(
+            ses=ses,
+            cmd="open_folder", 
+            args=json.dumps({"id": "invalid_string"})
+        ))
+        assert False, "Should have raised error for invalid folder ID type"
+    except (GRPCError, AssertionError):
+        pass  # Expected - either GRPCError or AssertionError from validation
+    
+    print("✓ Non-existent folder handling works correctly")
+
+
+async def org_test__breadcrumb_navigation_up(oi: organizer.OrganizerInbound):
+    """
+    Test navigating back up the folder hierarchy - ensures breadcrumb truncation works.
+    """
+    ses, root_fld = await _create_test_folder_and_session(oi)
+    
+    # Create nested structure: root -> folder1 -> folder2 -> folder3
+    with oi.db_new_session() as dbs:
+        folder1 = await oi.folders_helper.create_folder(dbs, ses, root_fld, "Level 1")
+        folder1_id = folder1.id
+        dbs.commit()
+    
+    with oi.db_new_session() as dbs:
+        folder1_obj = dbs.query(DbFolder).filter(DbFolder.id == folder1_id).one()
+        folder2 = await oi.folders_helper.create_folder(dbs, ses, folder1_obj, "Level 2")
+        folder2_id = folder2.id
+        dbs.commit()
+    
+    with oi.db_new_session() as dbs:
+        folder2_obj = dbs.query(DbFolder).filter(DbFolder.id == folder2_id).one()
+        folder3 = await oi.folders_helper.create_folder(dbs, ses, folder2_obj, "Level 3")
+        folder3_id = folder3.id
+        dbs.commit()
+    
+    # Navigate down to folder3 step by step
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=ses, cmd="open_folder", args=json.dumps({"id": folder1_id})))
+    
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=ses, cmd="open_folder", args=json.dumps({"id": folder2_id})))
+    
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=ses, cmd="open_folder", args=json.dumps({"id": folder3_id})))
+    
+    # Verify we're at folder3 with full trail
+    path, _ = await oi.folders_helper.get_current_folder_path(ses)
+    path_ids = [f.id for f in path]
+    assert len(path_ids) == 4, "Should have full path to folder3"
+    assert path_ids == [root_fld.id, folder1_id, folder2_id, folder3_id], "Path should be complete hierarchy"
+    
+    # Navigate back to folder1 (should truncate trail)
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=ses, cmd="open_folder", args=json.dumps({"id": folder1_id})))
+    
+    path, _ = await oi.folders_helper.get_current_folder_path(ses)
+    path_ids = [f.id for f in path]
+    assert len(path_ids) == 2, "Should have truncated path"
+    assert path_ids == [root_fld.id, folder1_id], "Should truncate at folder1"
+    
+    # Navigate back to root
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=ses, cmd="open_folder", args=json.dumps({"id": root_fld.id})))
+    
+    path, _ = await oi.folders_helper.get_current_folder_path(ses)
+    path_ids = [f.id for f in path]
+    assert len(path_ids) == 1, "Should be back to root only"
+    assert path_ids == [root_fld.id], "Should be at root folder"
+    
+    print("✓ Breadcrumb navigation up hierarchy works correctly")
+
+
+async def org_test__admin_multi_user_context_switching(oi: organizer.OrganizerInbound):
+    """
+    Test admin switching between multiple users' folders in the same session.
+    """
+    # Create 3 users
+    with oi.db_new_session() as dbs:
+        user1_id = "multi.user1"
+        user2_id = "multi.user2" 
+        admin_id = "multi.admin"
+        dbs.add(DbUser(id=user1_id, name="User 1"))
+        dbs.add(DbUser(id=user2_id, name="User 2"))
+        dbs.add(DbUser(id=admin_id, name="Admin User"))
+        dbs.commit()
+
+    user1_ses = org.UserSessionData(
+        sid="user1_sid", user=clap.UserInfo(id=user1_id, name="User 1"), 
+        is_admin=False, cookies={})
+        
+    user2_ses = org.UserSessionData(
+        sid="user2_sid", user=clap.UserInfo(id=user2_id, name="User 2"),
+        is_admin=False, cookies={})
+        
+    admin_ses = org.UserSessionData(
+        sid="admin_sid", user=clap.UserInfo(id=admin_id, name="Admin User"),
+        is_admin=True, cookies={})
+
+    # Create root folders for users
+    with oi.db_new_session() as dbs:
+        user1_root = await db_get_or_create_user_root_folder(dbs, user1_ses.user, oi.srv, oi.log)
+        user1_root_id = user1_root.id
+        dbs.commit()
+        
+    with oi.db_new_session() as dbs:
+        user2_root = await db_get_or_create_user_root_folder(dbs, user2_ses.user, oi.srv, oi.log)
+        user2_root_id = user2_root.id
+        dbs.commit()
+        
+    with oi.db_new_session() as dbs:
+        admin_root = await db_get_or_create_user_root_folder(dbs, admin_ses.user, oi.srv, oi.log)
+        admin_root_id = admin_root.id
+        dbs.commit()
+
+    # Admin starts at their own root
+    path, _ = await oi.folders_helper.get_current_folder_path(admin_ses)
+    assert path[-1].id == admin_root_id, "Admin should start at their own root"
+    assert path[-1].user_id == admin_id, "Should be admin's folder"
+
+    # Admin opens user1's folder
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=admin_ses, cmd="open_folder", args=json.dumps({"id": user1_root_id})))
+    
+    path, _ = await oi.folders_helper.get_current_folder_path(admin_ses)
+    assert len(path) == 1, "Should start fresh trail when switching users"
+    assert path[0].id == user1_root_id, "Should be at user1's root"
+    assert path[0].user_id == user1_id, "Should be user1's folder"
+
+    # Admin switches to user2's folder
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=admin_ses, cmd="open_folder", args=json.dumps({"id": user2_root_id})))
+    
+    path, _ = await oi.folders_helper.get_current_folder_path(admin_ses)
+    assert len(path) == 1, "Should start fresh trail again when switching users"
+    assert path[0].id == user2_root_id, "Should be at user2's root"
+    assert path[0].user_id == user2_id, "Should be user2's folder"
+
+    # Admin switches back to their own folder
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=admin_ses, cmd="open_folder", args=json.dumps({"id": admin_root_id})))
+    
+    path, _ = await oi.folders_helper.get_current_folder_path(admin_ses)
+    assert len(path) == 1, "Should have single folder when returning to own root"
+    assert path[0].id == admin_root_id, "Should be at admin's root"
+    assert path[0].user_id == admin_id, "Should be admin's folder"
+
+    print("✓ Admin multi-user context switching works correctly")
+
+
+async def org_test__shared_folder_cookie_interactions(oi: organizer.OrganizerInbound):
+    """
+    Test interaction between path cookies and shared folder cookies.
+    """
+    # Create owner session and shared folder
+    owner_ses, owner_root = await _create_test_folder_and_session(oi)
+    
+    with oi.db_new_session() as dbs:
+        shared_folder = await oi.folders_helper.create_folder(dbs, owner_ses, owner_root, "Shared Folder")
+        subfolder = await oi.folders_helper.create_folder(dbs, owner_ses, shared_folder, "Subfolder")
+        shared_folder_id = shared_folder.id
+        subfolder_id = subfolder.id
+        dbs.commit()
+
+    # Create share
+    with oi.db_new_session() as dbs:
+        share_token = await oi.folders_helper.generate_share_token()
+        share = DbSharedFolder(
+            folder_id=shared_folder_id,
+            share_token=share_token
+        )
+        dbs.add(share)
+        dbs.commit()
+
+    # Create recipient user
+    with oi.db_new_session() as dbs:
+        recipient_user_id = "shared.cookie.recipient"
+        dbs.add(DbUser(id=recipient_user_id, name="Cookie Test Recipient"))
+        dbs.commit()
+
+    recipient_ses = org.UserSessionData(
+        sid="recipient_sid",
+        user=clap.UserInfo(id=recipient_user_id, name="Cookie Test Recipient"),
+        is_admin=False,
+        cookies={}
+    )
+
+    # Recipient accesses shared folder via shared URL
+    result = await organizer.navigate_page_impl(oi, org.NavigatePageRequest(
+        ses=recipient_ses,
+        page_id=f"shared.{share_token}"
+    ))
+    
+    assert isinstance(result, org.ClientShowPageRequest), "Should return valid page"
+    
+    # Verify both cookies are set
+    assert PATH_COOKIE_NAME in recipient_ses.cookies, "Path cookie should be set"
+    assert SHARED_FOLDER_TOKEN_COOKIE_NAME in recipient_ses.cookies, "Shared token cookie should be set"
+    assert recipient_ses.cookies[SHARED_FOLDER_TOKEN_COOKIE_NAME] == share_token, "Shared token should match"
+    
+    # Verify path cookie points to shared folder
+    path_data = json.loads(recipient_ses.cookies[PATH_COOKIE_NAME])
+    assert path_data == [shared_folder_id], "Path should point to shared folder"
+
+    # Navigate within shared folder - should preserve shared token
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=recipient_ses, 
+        cmd="open_folder", 
+        args=json.dumps({"id": subfolder_id})
+    ))
+    
+    # Verify shared token is still present
+    assert SHARED_FOLDER_TOKEN_COOKIE_NAME in recipient_ses.cookies, "Shared token should be preserved"
+    assert recipient_ses.cookies[SHARED_FOLDER_TOKEN_COOKIE_NAME] == share_token, "Shared token should be unchanged"
+    
+    # Verify path was updated
+    path_data = json.loads(recipient_ses.cookies[PATH_COOKIE_NAME])
+    assert path_data == [shared_folder_id, subfolder_id], "Path should include subfolder"
+    
+    # Verify recipient can still access folder contents
+    path, _ = await oi.folders_helper.get_current_folder_path(recipient_ses)
+    assert len(path) == 2, "Should have path to subfolder"
+    assert path[0].id == shared_folder_id, "Should start at shared folder"
+    assert path[1].id == subfolder_id, "Should end at subfolder"
+
+    print("✓ Shared folder cookie interactions work correctly")
+
+
 # TODO: JavaScript action validation testing?
 # Consider adding validation for generated JavaScript code in actiondefs.py to catch:
 # - Syntax errors in generated JavaScript snippets

@@ -123,13 +123,33 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             assert folder_id, "open_folder arg 'id' missing"
             assert isinstance(folder_id, int), "open_folder arg 'id' not an int"
 
+            # Check if target folder exists and get its owner
+            with oi.db_new_session() as dbs:
+                target_folder = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
+                if not target_folder:
+                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{folder_id}' not found")
+                target_owner_id = target_folder.user_id
+
             # Construct new breadcrumb trail
             folder_path, _root_folder = await oi.folders_helper.get_current_folder_path(cmd.ses, None)
             trail = [f.id for f in folder_path]
+            
             if folder_id in trail:
-                trail = trail[:trail.index(folder_id)+1] # go up in current trail => remove all after this folder
+                # Going back up in current trail => remove all after this folder
+                trail = trail[:trail.index(folder_id)+1]
             else:
-                trail.append(folder_id) # add folder id at the end
+                # Check if we're crossing ownership boundaries
+                current_owner_id = folder_path[-1].user_id if folder_path else None
+                
+                if (current_owner_id != target_owner_id and 
+                    target_owner_id != cmd.ses.user.id and 
+                    cmd.ses.is_admin):
+                    # Admin is switching to another user's folder - start fresh trail from target
+                    oi.log.debug(f"Admin switching from {current_owner_id} to {target_owner_id} folders - starting fresh trail")
+                    trail = [folder_id]
+                else:
+                    # Normal case: append folder id at the end
+                    trail.append(folder_id)
 
             # Update folder path cookie
             serialized_trail = json.dumps(trail)
