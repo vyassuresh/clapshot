@@ -40,6 +40,7 @@ function mapDefItems(items: VideoListDefItem[]) {
 function handleConsider(e: CustomEvent<DndEvent>) {
     isDragging = true;
     const {items: newItems, info: {trigger, source, id}} = e.detail;
+
     if (source !== SOURCES.KEYBOARD) {
         if (Object.keys($selectedTiles).length && trigger === TRIGGERS.DRAG_STARTED) {
             if (Object.keys($selectedTiles).includes(id)) {
@@ -53,7 +54,11 @@ function handleConsider(e: CustomEvent<DndEvent>) {
             }
         }
     }
-    if (trigger === TRIGGERS.DRAG_STOPPED) $selectedTiles = {};
+
+    if (trigger === TRIGGERS.DRAG_STOPPED) {
+        isDragging = false;
+        $selectedTiles = {};
+    }
     items = newItems as VideoListDefItem[];
 }
 function handleFinalize(e: CustomEvent<DndEvent>) {
@@ -61,6 +66,7 @@ function handleFinalize(e: CustomEvent<DndEvent>) {
 
     // Handle multi-selected drop
     let {items: newItems, info: {trigger, source, id}} = e.detail;
+
     if (Object.keys($selectedTiles).length) {
         if (trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
             items = newItems.filter(item => !Object.keys($selectedTiles).includes(item.id)) as VideoListDefItem[];
@@ -95,34 +101,34 @@ function dispatchOpenItem(id: string) {
     }
 }
 
-function handleMouseOrKeyDown(id: string, e: any) {
+function handleMouseDown(id: string, e: MouseEvent) {
     if (isDragging) {
-        console.log("(dragging => videolist: ignore key/mouse down)");
+        console.log("(dragging => videolist: ignore mouse down)");
         return;
     }
     hidePopupMenus();
 
-    // Open item by keyboard
-    if (e.key) {
-        if (e.key == "Enter") {
-            dispatchOpenItem(id);
-            $selectedTiles = {};
-            return;
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
+    // Handle Ctrl+click on macOS as context menu (equivalent to right-click)
+    if (isMac && e.ctrlKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        let item = items.find(item => item.id === id);
+        if (item) {
+            onContextMenu(e, item);
         }
+        return;
     }
-    // (Multi-)selecting items
-    if (!e.shiftKey ) return;
-    if (e.key && e.key !== "Shift") return;
-    if (Object.keys($selectedTiles).includes(id)) {
-        delete($selectedTiles[id]);
-    } else {
-        let it = items.find(item => item.id === id);
-        if (it)
-            $selectedTiles[id] = it;
-        else
-            console.error("UI BUG: videolist item not found");
+
+    // Note: Selection logic moved to handleMouseUp since mousedown events are intercepted by drag library
+}
+
+function handleKeyDown(id: string, e: KeyboardEvent) {
+    // Note: Enter key is handled by enterKeyInterceptor action
+    if (isDragging) {
+        return;
     }
-    $selectedTiles = {...$selectedTiles};
 }
 
 function transformDraggedElement(el: any) {
@@ -139,9 +145,22 @@ function transformDraggedElement(el: any) {
 
 function handleMouseUp(e: MouseEvent, item: VideoListDefItem) {
     if (e.button > 0) return; // ignore right click
-    if (!isDragging && !e.shiftKey) {
-        $selectedTiles = {};
-        $selectedTiles[item.id] = item;
+
+    if (!isDragging) {
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const isMultiSelectKey = isMac ? e.metaKey : e.ctrlKey;
+
+        if (e.shiftKey || isMultiSelectKey) {
+            if (Object.keys($selectedTiles).includes(item.id)) {
+                delete($selectedTiles[item.id]);
+            } else {
+                $selectedTiles[item.id] = item;
+            }
+            $selectedTiles = {...$selectedTiles};
+        } else {
+            $selectedTiles = {};
+            $selectedTiles[item.id] = item;
+        }
     }
 }
 
@@ -208,9 +227,37 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
 function isShadowItem(item: any) {
     return item[SHADOW_ITEM_MARKER_PROPERTY_NAME];
 }
+
+// Custom action to intercept Enter key before dnd library gets it
+function enterKeyInterceptor(node: HTMLElement) {
+    function handleKeydown(event: KeyboardEvent) {
+        if (event.key === 'Enter' && !event.repeat) {
+            const focusedElement = document.activeElement;
+            if (focusedElement && focusedElement.id.startsWith("videolist_item__")) {
+                console.log("### INTERCEPTED ENTER WITH CAPTURE PHASE");
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+
+                const itemId = focusedElement.id.replace("videolist_item__", "");
+                dispatchOpenItem(itemId);
+                $selectedTiles = {};
+            }
+        }
+    }
+
+    // Capture phase runs before svelte-dnd-action's handlers
+    node.addEventListener('keydown', handleKeydown, { capture: true });
+
+    return {
+        destroy() {
+            node.removeEventListener('keydown', handleKeydown, { capture: true });
+        }
+    };
+}
 </script>
 
-<div>
+<div use:enterKeyInterceptor>
     <section
         use:dndzone="{{
             items, dragDisabled,
@@ -238,9 +285,9 @@ function isShadowItem(item: any) {
                 class:selectedTile={Object.keys($selectedTiles).includes(item.id)}
                 onclick={stopPropagation(bubble('click'))}
                 ondblclick={(_e) => {$selectedTiles = {}; dispatchOpenItem(item.id)}}
-                onmousedown={(e) => handleMouseOrKeyDown(item.id, e)}
+                onmousedown={(e) => handleMouseDown(item.id, e)}
                 onmouseup={(e) => handleMouseUp(e, item)}
-                onkeydown={(e) => handleMouseOrKeyDown(item.id, e)}
+                onkeydown={(e) => handleKeyDown(item.id, e)}
                 oncontextmenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
