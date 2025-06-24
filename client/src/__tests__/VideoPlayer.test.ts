@@ -762,9 +762,8 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
   describe('Collaboration Features', () => {
     describe('Collaboration State Management', () => {
       it('should only send collab reports when in collaboration mode', () => {
-        const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4' } });
         const eventSpy = vi.fn();
-        component.$on('collabReport', eventSpy);
+        const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4', oncollabreport: eventSpy } });
         
         // Without collabId, should not send reports
         collabId.set(null);
@@ -778,9 +777,8 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
       });
 
       it('should include correct data in collaboration reports', () => {
-        const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4' } });
         const eventSpy = vi.fn();
-        component.$on('collabReport', eventSpy);
+        const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4', oncollabreport: eventSpy } });
         
         collabId.set('collab-session-123');
         curSubtitle.set({
@@ -797,16 +795,14 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
         component.setPlayback(true, 'test');
         
         expect(eventSpy).toHaveBeenCalledWith(
-          expect.objectContaining({
-            detail: {
-              report: expect.objectContaining({
-                paused: expect.any(Boolean),
-                loop: expect.any(Boolean),
-                seekTimeSec: expect.any(Number),
-                subtitleId: 'subtitle-1'
-              })
-            }
-          })
+          {
+            report: expect.objectContaining({
+              paused: expect.any(Boolean),
+              loop: expect.any(Boolean),
+              seekTimeSec: expect.any(Number),
+              subtitleId: 'subtitle-1'
+            })
+          }
         );
       });
 
@@ -904,9 +900,8 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
 
     describe('Collaboration Report Content', () => {
       it('should handle collaboration report generation', () => {
-        const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4' } });
         const eventSpy = vi.fn();
-        component.$on('collabReport', eventSpy);
+        const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4', oncollabreport: eventSpy } });
         
         collabId.set('collab-session-123');
         
@@ -979,9 +974,8 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
         
         collabId.set('collab-session-123');
         
-        const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4' } });
         const eventSpy = vi.fn();
-        component.$on('change-subtitle', eventSpy);
+        const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4', onchangesubtitle: eventSpy } });
         
         const subtitleButton = screen.getByTitle('Toggle closed captioning');
         fireEvent.click(subtitleButton);
@@ -1076,9 +1070,8 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
         }]
       });
 
-      const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4' } });
       const eventSpy = vi.fn();
-      component.$on('change-subtitle', eventSpy);
+      const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4', onchangesubtitle: eventSpy } });
       
       const subtitleButton = screen.getByTitle('Toggle closed captioning');
       
@@ -1371,13 +1364,11 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
           }]
         });
 
-        const { component } = render(VideoPlayer, { props: { src: 'workflow-video.mp4' } });
-        
         // Event spies to track the workflow
         const collabReportSpy = vi.fn();
         const seekedSpy = vi.fn();
-        component.$on('collabReport', collabReportSpy);
-        component.$on('seeked', seekedSpy);
+        const subtitleEventSpy = vi.fn();
+        const { component } = render(VideoPlayer, { props: { src: 'workflow-video.mp4', oncollabreport: collabReportSpy, onseeked: seekedSpy, onchangesubtitle: subtitleEventSpy } });
 
         // STEP 1: Navigate to specific time in video
         // User seeks to 30 seconds where they want to add a comment
@@ -1447,8 +1438,6 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
 
         // STEP 7: Switch subtitle context
         // User realizes they want to comment on a different subtitle
-        const subtitleEventSpy = vi.fn();
-        component.$on('change-subtitle', subtitleEventSpy);
         
         // Simulate subtitle toggle
         const subtitleButton = screen.getByTitle('Toggle closed captioning');
@@ -1524,10 +1513,10 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
         // Verify collaboration reports contain expected data
         if (totalCollabReports > 0) {
           const lastReport = collabReportSpy.mock.calls[totalCollabReports - 1][0];
-          expect(lastReport.detail.report).toHaveProperty('paused');
-          expect(lastReport.detail.report).toHaveProperty('seekTimeSec');
-          expect(typeof lastReport.detail.report.paused).toBe('boolean');
-          expect(typeof lastReport.detail.report.seekTimeSec).toBe('number');
+          expect(lastReport.report).toHaveProperty('paused');
+          expect(lastReport.report).toHaveProperty('seekTimeSec');
+          expect(typeof lastReport.report.paused).toBe('boolean');
+          expect(typeof lastReport.report.seekTimeSec).toBe('number');
         }
 
         // WORKFLOW VERIFICATION: Ensure component is in consistent state

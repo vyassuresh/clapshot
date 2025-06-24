@@ -1,6 +1,5 @@
 <script lang="ts">
 
-import { createEventDispatcher } from 'svelte';
 import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
 import { dndzone, TRIGGERS, SOURCES } from 'svelte-dnd-action';
 import { selectedTiles } from '@/stores';
@@ -13,16 +12,17 @@ import {rgbToCssColor, cssVariables} from './utils';
         name?: string;
         preview_items?: Proto3.PageItem_FolderListing_Item[];
         visualization?: Proto3.PageItem_FolderListing_Item_Visualization|undefined;
+        ondropitemsinto?: (event: {folderId: any, items: any[]}) => void;
     }
 
     let {
         id = {},
         name = "",
         preview_items = [],
-        visualization = undefined
+        visualization = undefined,
+        ondropitemsinto
     }: Props = $props();
 
-const dispatch = createEventDispatcher();
 
 function contentPreviewItems(data: Proto3.PageItem_FolderListing_Item[]): Proto3.PageItem_FolderListing_Item[] {
     let items = data;
@@ -44,7 +44,7 @@ function onSink(e: any) {
     newItems = newItems.filter((item, pos) =>
         newItems.map((mi) => mi['id']).indexOf(item['id']) === pos );
 
-    dispatch("drop-items-into", {'folderId': id, 'items': newItems});
+    if (ondropitemsinto) ondropitemsinto({'folderId': id, 'items': newItems});
 
     dndItems = [];
 }

@@ -94,9 +94,9 @@ function upload() {
 
 function onDropFiles(e: any) {
     dragActive = false;
-    files.accepted = e.detail.acceptedFiles;
-    files.rejected = e.detail.fileRejections;
-    if (files.rejected.length > 0 && files.accepted.length==0) {
+    files.accepted = e.detail.acceptedFiles || [];
+    files.rejected = e.detail.fileRejections || [];
+    if (files.rejected.length > 0 && files.accepted.length == 0) {
         alert("Drop rejected. Only video files are allowed.");
     }
     upload();
@@ -111,10 +111,9 @@ function onDropFiles(e: any) {
             disableDefaultStyles={true}
             containerClasses="custom-dropzone {dragActive ? 'drag-active' : ''}"
             containerStyles = "borderColor: '#fff', color: '#90cdf4'"
-            inputElement = {undefined}
-            on:dragenter={ () => { dragActive = true; }}
-            on:dragleave={ () => { dragActive = false; }}
             on:drop={onDropFiles}
+            on:dragenter={() => { dragActive = true; }}
+            on:dragleave={() => { dragActive = false; }}
         >
           {#if uploadingNow}
             <div class="p-2">

@@ -1,27 +1,28 @@
 <script lang="ts">
 
-import { createEventDispatcher } from 'svelte';
 import { scale, slide } from "svelte/transition";
 import { curSubtitle, curUserId, curUserIsAdmin, curVideo, subtitleEditingId } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-const dispatch = createEventDispatcher();
 
     interface Props {
         sub: Proto3.Subtitle;
         isDefault?: boolean;
+        onupdatesubtitle?: (event: {sub: Proto3.Subtitle, isDefault: boolean}) => void;
+        ondeletesubtitle?: (event: {id: string}) => void;
+        onchangesubtitle?: (event: {id: string}) => void;
     }
 
-    let { sub = $bindable(), isDefault = $bindable(false) }: Props = $props();
+    let { sub = $bindable(), isDefault = $bindable(false), onupdatesubtitle, ondeletesubtitle, onchangesubtitle }: Props = $props();
 
 
 function doSave() {
-    dispatch("update-subtitle", {sub, isDefault});
+    if (onupdatesubtitle) onupdatesubtitle({sub, isDefault});
     $subtitleEditingId = null;
 }
 
 function doDelete() {
-    dispatch("delete-subtitle", {id: sub.id});
+    if (ondeletesubtitle) ondeletesubtitle({id: sub.id});
     $subtitleEditingId = null;
 }
 
@@ -41,7 +42,7 @@ function handleKeyDown(event: { key: string; }) {
 <div transition:scale class="flex flex-nowrap space-x-1 text-sm whitespace-nowrap justify-between items-center text-gray-400 w-full">
     <button
         class="flex-grow text-left hover:text-white {sub.id == $curSubtitle?.id ? 'text-amber-600' : 'text-gray-400'} overflow-hidden"
-        onclick={() => dispatch("change-subtitle", {id: sub.id})}
+        onclick={() => onchangesubtitle?.({id: sub.id})}
         ondblclick={toggleEditing}
         title={sub.origFilename}
         style="text-overflow: ellipsis; white-space: nowrap;"

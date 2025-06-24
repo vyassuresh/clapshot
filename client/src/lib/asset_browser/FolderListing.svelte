@@ -258,10 +258,10 @@ function isShadowItem(item: any) {
                             name={item.obj.folder.title}
                             preview_items={item.obj.folder.previewItems }
                             visualization={item.obj.vis}
-                            on:drop-items-into={(e) => {
+                            ondropitemsinto={(event) => {
                                 dispatch("move-to-folder", {
-                                    dstFolderId: e.detail.folderId,
-                                    ids: mapDefItems(e.detail.items) });
+                                    dstFolderId: event.folderId,
+                                    ids: mapDefItems(event.items) });
                             }}
                         />
                     {:else}

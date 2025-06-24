@@ -98,36 +98,36 @@ function onCommentInputButton(e: any) {
         }
     }
 
-    if (e.detail.action == "send")
+    if (e.action == "send")
     {
-        if (videoPlayer && (e.detail.comment_text != "" || videoPlayer.hasDrawing()))
+        if (videoPlayer && (e.comment_text != "" || videoPlayer.hasDrawing()))
         {
             wsEmit({addComment: {
                 mediaFileId: $mediaFileId!,
-                comment: e.detail.comment_text,
+                comment: e.comment_text,
                 drawing: videoPlayer ? videoPlayer.getScreenshot() : "",
-                timecode: e.detail.is_timed && videoPlayer ? videoPlayer.getCurTimecode() : "",
+                timecode: e.is_timed && videoPlayer ? videoPlayer.getCurTimecode() : "",
                 subtitleId: $curSubtitle?.id
             }});
         }
         resumePlayer();
     }
-    else if (e.detail.action == "text_input") {
+    else if (e.action == "text_input") {
         pausePlayer();   // auto-pause when typing a comment
     }
-    else if (e.detail.action == "color_select") {
+    else if (e.action == "color_select") {
         pausePlayer();
-        if (videoPlayer) videoPlayer.onColorSelect(e.detail.color);
+        if (videoPlayer) videoPlayer.onColorSelect(e.color);
     }
-    else if (e.detail.action == "draw") {
-        if (e.detail.is_draw_mode) { pausePlayer(); }
-        if (videoPlayer) videoPlayer.onToggleDraw(e.detail.is_draw_mode);
+    else if (e.action == "draw") {
+        if (e.is_draw_mode) { pausePlayer(); }
+        if (videoPlayer) videoPlayer.onToggleDraw(e.is_draw_mode);
     }
-    else if (e.detail.action == "undo") {
+    else if (e.action == "undo") {
         pausePlayer();
         if (videoPlayer) videoPlayer.onDrawUndo();
     }
-    else if (e.detail.action == "redo") {
+    else if (e.action == "redo") {
         pausePlayer();
         if (videoPlayer) videoPlayer.onDrawRedo();
     }
@@ -135,17 +135,17 @@ function onCommentInputButton(e: any) {
 
 function onDisplayComment(e: any) {
     if (!$curVideo) { throw Error("No video loaded"); }
-    if (videoPlayer) videoPlayer.seekToSMPTE(e.detail.timecode);
+    if (videoPlayer) videoPlayer.seekToSMPTE(e.timecode);
     // Close draw mode while showing (drawing from a saved) comment
-    if (videoPlayer && e.detail.drawing) { videoPlayer.setDrawing(e.detail.drawing); }
-    if (e.detail.subtitleId) { $curSubtitle = $curVideo.subtitles.find((s) => s.id == e.detail.subtitleId) ?? null; }
+    if (videoPlayer && e.drawing) { videoPlayer.setDrawing(e.drawing); }
+    if (e.subtitleId) { $curSubtitle = $curVideo.subtitles.find((s) => s.id == e.subtitleId) ?? null; }
     if ($collabId) {
         logAbbrev("Collab: onDisplayComment. collab_id: '" + $collabId + "'");
         wsEmit({collabReport: {
             paused: true,
             loop: videoPlayer ? videoPlayer.isLooping() : false,
             seekTimeSec: videoPlayer ? videoPlayer.getCurTime() : 0,
-            drawing: e.detail.drawing,
+            drawing: e.drawing,
             subtitleId: $curSubtitle?.id
         }});
     }
@@ -154,28 +154,27 @@ function onDisplayComment(e: any) {
 }
 
 function onDeleteComment(e: any) {
-    wsEmit({delComment: { commentId: e.detail.id }});
+    wsEmit({delComment: { commentId: e.id }});
 }
 
-function onReplyComment(e: { detail: { parentId: string; commentText: string, subtitleId: string|undefined }}) {
-    console.log("onReplyComment: ", e.detail);
+function onReplyComment(e: { parentId: string; commentText: string, subtitleId?: string }) {
+    console.log("onReplyComment: ", e);
     wsEmit({addComment: {
         mediaFileId: $mediaFileId!,
-        parentId: e.detail.parentId,
-        comment: e.detail.commentText,
-        subtitleId: e.detail.subtitleId,
+        parentId: e.parentId,
+        comment: e.commentText,
+        subtitleId: e.subtitleId,
     }});
 }
 
 function onEditComment(e: any) {
     wsEmit({editComment: {
-        commentId: e.detail.id,
-        newComment: e.detail.comment_text,
+        commentId: e.id,
+        newComment: e.comment_text,
     }});
 }
 
-function onAddCommentsBulk(e: { detail: Proto3.Comment[]; }) {
-    const comments: Proto3.Comment[] = e.detail;
+function onAddCommentsBulk(comments: Proto3.Comment[]) {
     for (let c of comments) {
         wsEmit({addComment: {
             mediaFileId: $mediaFileId!,
@@ -197,22 +196,22 @@ function closePlayerIfOpen() {
     $videoIsReady = false;
 }
 
-function onPlayerSeeked(_e: any) {
+function onPlayerSeeked() {
     if (commentInput) commentInput.forceDrawMode(false);  // Close draw mode when video frame is changed
 }
 
-function onCollabReport(e: { detail: { report: Proto3.client.ClientToServerCmd_CollabReport; }; }) {
+function onCollabReport(e: { report: Proto3.client.ClientToServerCmd_CollabReport; }) {
     if ($collabId) {
-        wsEmit({collabReport: e.detail.report});
+        wsEmit({collabReport: e.report});
     }
 }
 
 function onCommentPinClicked(e: any) {
     // Find corresponding comment in the list, scroll to it and highlight
-    let commentId = e.detail.id;
+    let commentId = e.id;
     let c = $allComments.find((c: { comment: { id: any; }; }) => c.comment.id == commentId);
     if (c) {
-        onDisplayComment({detail: {timecode: c.comment.timecode, drawing: c.comment.drawing}});
+        onDisplayComment({timecode: c.comment.timecode, drawing: c.comment.drawing});
         let card = document.getElementById("comment_card_" + commentId);
         if (card) {
             card.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"});
@@ -223,7 +222,7 @@ function onCommentPinClicked(e: any) {
 }
 
 function onSubtitleChange(e: any) {
-    const sub_id = e.detail.id;
+    const sub_id = e.id;
     if (!$curVideo) { throw Error("No video loaded"); }
     console.debug("onSubtitleChange, id:", sub_id, "allSubtitles:", $curVideo.subtitles);
     if ($curSubtitle?.id == sub_id) {
@@ -282,7 +281,7 @@ async function onUploadSubtitles() {
 }
 
 function onSubtitleDelete(e: any) {
-    const sub_id = e.detail.id;
+    const sub_id = e.id;
     if (window.confirm("Are you sure you want to delete this subtitle?")) {
         if ($curSubtitle?.id == sub_id) { $curSubtitle = null; }
         wsEmit({ delSubtitle: { id: sub_id } });
@@ -302,8 +301,8 @@ export interface ClientToServerCmd_EditSubtitleInfo {
 */
 
 async function onSubtitleUpdate(e: any) {
-    const sub = e.detail.sub;
-    const isDefault = e.detail.isDefault;
+    const sub = e.sub;
+    const isDefault = e.isDefault;
     if (isNaN(sub.timeOffset)) {
         console.error("Invalid time offset: ", sub.timeOffset);
         acts.add({mode: 'error', message: "Invalid time offset: " + sub.timeOffset, lifetime: 5});
@@ -949,7 +948,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
 <main>
     <span id="popup-container"></span>
     <div class="flex flex-col bg-[#101016] w-screen h-screen {debugLayout?'border-2 border-yellow-300':''}">
-        <div class="flex-none w-full"><NavBar on:basic-auth-logout={basicAuthLogout} on:add-comments={onAddCommentsBulk}/></div>
+        <div class="flex-none w-full"><NavBar onbasicauthlogout={basicAuthLogout} onaddcomments={onAddCommentsBulk}/></div>
         <div class="flex-grow w-full overflow-auto {debugLayout?'border-2 border-cyan-300':''}">
             <Notifications />
 
@@ -987,15 +986,15 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                 <div class="flex-1 bg-cyan-900">
                     <VideoPlayer
                         bind:this={videoPlayer} src={$curVideo.playbackUrl}
-                        on:seeked={onPlayerSeeked}
-                        on:collabReport={onCollabReport}
-                        on:commentPinClicked={onCommentPinClicked}
-                        on:uploadSubtitles={onUploadSubtitles}
-                        on:change-subtitle={onSubtitleChange}
+                        onseeked={onPlayerSeeked}
+                        oncollabreport={onCollabReport}
+                        oncommentpinclicked={onCommentPinClicked}
+                        onuploadsubtitles={onUploadSubtitles}
+                        onchangesubtitle={onSubtitleChange}
                     />
                 </div>
                 <div class="flex-none w-full p-2 {debugLayout?'border-2 border-green-500':''}">
-                    <CommentInput bind:this={commentInput} on:button-clicked={onCommentInputButton} />
+                    <CommentInput bind:this={commentInput} onbuttonclicked={onCommentInputButton} />
                 </div>
             </div>
 
@@ -1006,10 +1005,10 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                         <CommentCard
                             indent={it.indent}
                             comment={it.comment}
-                            on:display-comment={onDisplayComment}
-                            on:delete-comment={onDeleteComment}
-                            on:reply-to-comment={onReplyComment}
-                            on:edit-comment={onEditComment}
+                            ondisplaycomment={onDisplayComment}
+                            ondeletecomment={onDeleteComment}
+                            onreplytocomment={onReplyComment}
+                            oneditcomment={onEditComment}
                         />
                     {/each}
                 </div>
@@ -1024,9 +1023,9 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                             <SubtitleCard
                                 sub={sub}
                                 isDefault={$curVideo.defaultSubtitleId == sub.id}
-                                on:change-subtitle={onSubtitleChange}
-                                on:delete-subtitle={onSubtitleDelete}
-                                on:update-subtitle={onSubtitleUpdate}
+                                onchangesubtitle={onSubtitleChange}
+                                ondeletesubtitle={onSubtitleDelete}
+                                onupdatesubtitle={onSubtitleUpdate}
                             />
                         {/each}
                     {/if}

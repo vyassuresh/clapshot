@@ -4,7 +4,7 @@
 
 import {acts} from '@tadashi/svelte-notification'
 import {create as sdb_create} from "simple-drawing-board";
-import {onMount, onDestroy, createEventDispatcher} from 'svelte';
+import {onMount, onDestroy} from 'svelte';
 import {scale} from "svelte/transition";
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import * as Proto3 from '@clapshot_protobuf/typescript';
@@ -13,13 +13,17 @@ import {allComments, curSubtitle, videoIsReady, collabId, curVideo} from '@/stor
 import LocalStorageCookies from '@/cookies';
 import CommentTimelinePin from './CommentTimelinePin.svelte';
 
-const dispatch = createEventDispatcher();
 
     interface Props {
         src: any;
+        oncollabreport?: (event: {report: Proto3.client.ClientToServerCmd_CollabReport}) => void;
+        onseeked?: () => void;
+        onchangesubtitle?: (event: {id: string | null}) => void;
+        oncommentpinclicked?: (event: {id: string}) => void;
+        onuploadsubtitles?: () => void;
     }
 
-    let { src }: Props = $props();
+    let { src, oncollabreport, onseeked, onchangesubtitle, oncommentpinclicked, onuploadsubtitles }: Props = $props();
 
 // These are bound to properties of the video
 let videoElem: any = $state();
@@ -34,22 +38,22 @@ export function getEffectiveDuration(): number {
 	if (duration != null && !isNaN(duration)) {
 		return duration;
 	}
-	
+
 	// Check if we're running in a test environment
 	// Multiple ways to detect this reliably
 	const isTestEnvironment = (
-		typeof globalThis !== 'undefined' && 
+		typeof globalThis !== 'undefined' &&
 		(globalThis.process?.env?.NODE_ENV === 'test' ||
 		 globalThis.process?.env?.VITEST === 'true' ||
 		 typeof (globalThis as any).expect !== 'undefined' ||
 		 typeof (globalThis as any).vi !== 'undefined')
 	);
-	
+
 	if (isTestEnvironment) {
 		// Only in tests: provide a reasonable fallback
 		return 120; // 2 minutes test duration
 	}
-	
+
 	// In production: return the actual value (NaN/undefined) so errors surface
 	return duration || 0;
 }
@@ -108,7 +112,7 @@ function send_collab_report(): void {
             drawing,
             subtitleId: $curSubtitle?.id,
         };
-        dispatch('collabReport', { report });
+        if (oncollabreport) oncollabreport({ report });
     }
 }
 
@@ -351,7 +355,7 @@ function onWindowKeyPress(e: KeyboardEvent): void {
 function seekSideEffects() {
     draw_board?.clear();
     onToggleDraw(false);
-    dispatch('seeked', {});
+    if (onseeked) onseeked();
 }
 
 export function seekToSMPTE(smpte: string) {
@@ -496,12 +500,12 @@ function toggleSubtitle() {
     }
     if ($curSubtitle) {
         prev_subtitle = $curSubtitle;
-        dispatch('change-subtitle', {id: null});
+        if (onchangesubtitle) onchangesubtitle({id: null});
     } else {
         if (prev_subtitle) {
-            dispatch('change-subtitle', {id: prev_subtitle.id});
+            if (onchangesubtitle) onchangesubtitle({id: prev_subtitle.id});
         } else {
-            dispatch('change-subtitle', {id: $curVideo?.subtitles[0]?.id});
+            if (onchangesubtitle) onchangesubtitle({id: $curVideo?.subtitles[0]?.id ?? null});
         }
     }
 }
@@ -509,7 +513,7 @@ function toggleSubtitle() {
 
 // Offset the start/end times of all cues in all text tracks by $curSubtitle.timeOffset seconds.
 // Called when the video is loaded, and when the subtitle changes.
-function offsetTextTracks() {
+function offsetTextTracks(retryCount = 0) {
     interface ExtendedVTTCue extends VTTCue {
         originalStartTime?: number;
         originalEndTime?: number;
@@ -593,7 +597,7 @@ function handleTimeUpdate() {
 
 function clickOnPin(id: string) {
     console.debug("Comment pin clicked:", id);
-    dispatch('commentPinClicked', {id});
+    if (oncommentpinclicked) oncommentpinclicked({id});
 
     // Set loop region between this pin and the next one, if looping is enabled
     let clicked_pin = null;
@@ -647,7 +651,7 @@ function clickOnPin(id: string) {
                     src="{$curSubtitle?.playbackUrl}"
                     srclang="en"
                     label="{$curSubtitle?.title}"
-                    onloadedmetadata={offsetTextTracks}
+                    onloadedmetadata={() => offsetTextTracks()}
                     default
                 />
 			</video>
@@ -679,7 +683,7 @@ function clickOnPin(id: string) {
 					username={item.usernameIfnull || item.userId || '?'}
 					comment={item.comment}
 					x_loc={tcToDurationFract(item.timecode)}
-					on:click={(_e) => clickOnPin(item.id)}
+					onclick={(event) => clickOnPin(event.id)}
 					/>
 			{/each}
 		</div>
@@ -728,7 +732,7 @@ function clickOnPin(id: string) {
                         onfocus={() => { changeSubtitleUploadIcon(true); }}
                         onmouseout={() => { changeSubtitleUploadIcon(false); }}
                         onblur={() => { changeSubtitleUploadIcon(false); }}
-                        onclick={() => { dispatch('uploadSubtitles', {}); }}
+                        onclick={() => { if (onuploadsubtitles) onuploadsubtitles(); }}
                     ></button>
                 {/if}
             </span>

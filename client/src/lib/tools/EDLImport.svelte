@@ -1,16 +1,16 @@
 <script lang="ts">
 import { curVideo } from "@/stores";
 import { Modal, Button, Input, Fileupload, Label, Helper } from 'flowbite-svelte';
-import { createEventDispatcher, onMount } from "svelte";
+import { onMount } from "svelte";
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-const dispatch = createEventDispatcher();
 
     interface Props {
         isOpen?: boolean;
+        onaddcomments?: (comments: Proto3.Comment[]) => void;
     }
 
-    let { isOpen = $bindable(false) }: Props = $props();
+    let { isOpen = $bindable(false), onaddcomments }: Props = $props();
 
 let edlForm: HTMLFormElement | undefined = $state();
 let frameRate: number = $state(24);
@@ -97,7 +97,7 @@ const handleAccept = () => {
                 timecode: edle.recordIn,
             } as Proto3.Comment;
         });
-        dispatch('add-comments', comments);
+        if (onaddcomments) onaddcomments(comments);
         isOpen = false;
     }
 };
@@ -106,16 +106,16 @@ const handleAccept = () => {
 <Modal title="Import EDL as Comments" bind:open={isOpen} class="w-96">
     <form bind:this={edlForm} class="flex flex-col space-y-1" action="#">
         <Label for="file_up">Upload EDL</Label>
-        <Fileupload id="file_up" accept=".edl" on:change={handleFileUpload} />
+        <Fileupload id="file_up" accept=".edl" onchange={handleFileUpload} />
         <Label for="fps_input" class="pt-2">Frame rate</Label>
         <Input id="fps_input" type="number" bind:value={frameRate}/>
     </form>
     
     <div class="flex gap-2 mt-4">
         {#if edlEvents.length>0}
-            <Button on:click={handleAccept} color="primary">Add as comments</Button>
+            <Button onclick={handleAccept} color="primary">Add as comments</Button>
         {/if}
-        <Button on:click={() => {isOpen=false;}} color="alternative">Cancel</Button>
+        <Button onclick={() => {isOpen=false;}} color="alternative">Cancel</Button>
     </div>
 
     <!-- scrollable list of time spans for review -->

@@ -3,20 +3,22 @@
     import { flushSync } from 'svelte';
 
 
-import { createEventDispatcher } from 'svelte';
 import { scale, slide } from "svelte/transition";
 import Avatar from '@/lib/Avatar.svelte';
 import { curUserId, curUserIsAdmin, allComments, curSubtitle, curVideo } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-const dispatch = createEventDispatcher();
 
     interface Props {
         indent?: number;
         comment: Proto3.Comment;
+        ondisplaycomment?: (event: {timecode: string, drawing?: string, subtitleId?: string}) => void;
+        ondeletecomment?: (event: {id: string}) => void;
+        onreplytocomment?: (event: {parentId: string, commentText: string, subtitleId?: string}) => void;
+        oneditcomment?: (event: {id: string, comment_text: string}) => void;
     }
 
-    let { indent = 0, comment = $bindable() }: Props = $props();
+    let { indent = 0, comment = $bindable(), ondisplaycomment, ondeletecomment, onreplytocomment, oneditcomment }: Props = $props();
 
 let editing = $state(false);
 let showActions: boolean = $state(false);
@@ -25,7 +27,7 @@ let showReply: boolean = $state(false);
 let replyInput: HTMLInputElement | undefined = $state();
 
 function onTimecodeClick(tc: string) {
-    dispatch("display-comment", {
+    if (ondisplaycomment) ondisplaycomment({
         timecode: tc,
         drawing: comment.drawing,
         subtitleId: comment.subtitleId
@@ -34,15 +36,15 @@ function onTimecodeClick(tc: string) {
 
 function onClickDeleteComment() {
     var result = confirm("Delete comment?");
-    if (result) {
-        dispatch("delete-comment", {'id': comment.id});
+    if (result && ondeletecomment) {
+        ondeletecomment({'id': comment.id});
     }
 }
 
 function onReplySubmit() {
-    if (replyInput && replyInput.value != "")
+    if (replyInput && replyInput.value != "" && onreplytocomment)
     {
-        dispatch("reply-to-comment", {
+        onreplytocomment({
             parentId: comment.id,
             commentText: replyInput.value,
             subtitleId: $curSubtitle?.id
@@ -64,8 +66,8 @@ function onEditFieldKeyDown(e: KeyboardEvent) {
             editing = false;
         });
         comment.comment = comment.comment.trim();
-        if (comment.comment != "")
-            dispatch("edit-comment", {'id': comment.id, 'comment_text': comment.comment});
+        if (comment.comment != "" && oneditcomment)
+            oneditcomment({'id': comment.id, 'comment_text': comment.comment});
     }
 }
 

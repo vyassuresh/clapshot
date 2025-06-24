@@ -2,12 +2,16 @@
     import { preventDefault } from 'svelte/legacy';
 
 import '@fortawesome/fontawesome-free/css/all.min.css';
-import { createEventDispatcher } from 'svelte';
 import { fade } from "svelte/transition";
 
 import { videoIsReady } from '@/stores';
 
-const dispatch = createEventDispatcher();
+
+interface Props {
+    onbuttonclicked?: (event: {action: string, comment_text?: string, is_timed?: boolean, is_draw_mode?: boolean, color?: string}) => void;
+}
+
+let { onbuttonclicked }: Props = $props();
 
 let inputText: any = $state();
 let drawMode = $state(false);
@@ -19,10 +23,10 @@ export function forceDrawMode(on: boolean) {
 }
 
 function sendDrawModeToParent() {
-    dispatch('button-clicked', {'action': 'draw', 'is_draw_mode': drawMode});
+    if (onbuttonclicked) onbuttonclicked({'action': 'draw', 'is_draw_mode': drawMode});
 }
 function onClickSend() {
-    dispatch('button-clicked', {'action': 'send', 'comment_text': inputText, 'is_timed': timedComment});
+    if (onbuttonclicked) onbuttonclicked({'action': 'send', 'comment_text': inputText, 'is_timed': timedComment});
     inputText = "";
     drawMode = false;
     sendDrawModeToParent();
@@ -34,19 +38,19 @@ function onClickDraw() {
 }
 function onColorSelected(c: string) {
     curColor = c;
-    dispatch('button-clicked', {'action': 'color_select', 'color': c});
+    if (onbuttonclicked) onbuttonclicked({'action': 'color_select', 'color': c});
 }
 function onUndoRedo(is_undo: boolean) {
-    if (is_undo) {
-        dispatch('button-clicked', {'action': 'undo'});
-    } else {
-        dispatch('button-clicked', {'action': 'redo'});
+    if (is_undo && onbuttonclicked) {
+        onbuttonclicked({'action': 'undo'});
+    } else if (!is_undo && onbuttonclicked) {
+        onbuttonclicked({'action': 'redo'});
     }
 }
 
 function onTextChange(e: any) {
-    if (e.target.value.length > 0) {
-        dispatch('button-clicked', {'action': 'text_input'});
+    if (e.target.value.length > 0 && onbuttonclicked) {
+        onbuttonclicked({'action': 'text_input'});
     }
     return false;
 }
