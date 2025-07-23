@@ -16,18 +16,23 @@ Written in Python (due to popularity), but Organizers can be implemented in any 
 - **Custom sorting**: Rearrange folder contents in your preferred order
 - **Orphan media management**: Unorganized files are automatically placed in your home folder
 
-### Folder Sharing (New in 0.6.2)
-- **Secure sharing URLs**: Share folders with others via secret URLs
-- **Read-only access**: Recipients can view and comment on shared content but not modify or upload files
+### Folder Sharing
+- **Secure token-based sharing**: 32-byte cryptographically secure random tokens for shared access
+- **Authentication required**: Shared folders still require user authentication (does NOT bypass authentication for anonymous access)
+- **Share revocation**: Ability to revoke shared folder access at any time
 - **Recursive sharing**: Sharing includes all subfolders and content within the shared folder
 - **Owner controls**: Only folder owners can create or revoke sharing access
-- **Visual indicators**: Shared folders display with a 🔗 link icon for easy identification
+- **Visual indicators**: Shared folders display with 🔗 link icons in breadcrumbs and folder listings
+- **Cookie-based sessions**: Persistent access tracking for shared folder sessions
+- **Automatic cleanup**: Share tokens automatically cleaned up when folders are deleted
 
 ### Administrative Tools
-- **User management**: Admins can view and manage all users' folder structures
-- **Cross-user operations**: Move content between any users' folders
+- **Admin folder view**: Special interface showing all user home folders with management capabilities
+- **User cleanup system**: Batch detection and removal of empty users with safety checks
+- **Cross-user operations**: Move content between any users' folders with admin navigation
 - **Ownership transfer**: Content ownership transfers automatically when moved between users
-- **Database integrity checks**: Automatic detection and repair of folder inconsistencies
+- **User lifecycle management**: Safe user deletion that preserves comments via database triggers
+- **Database integrity checks**: Automatic detection and repair of circular folder references and orphaned content
 
 ### Interactive User Interface
 - **Context menus**: Right-click popup menus for folder and file operations
