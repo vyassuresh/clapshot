@@ -109,6 +109,8 @@ run-local: ${SERVER_CMD} ${DEV_DATADIR}
 	${SERVER_CMD} --url-base http://127.0.0.1:8095/ --port 8095 --data-dir ${DEV_DATADIR} --migrate --cors '*' --org-cmd "${PLUGIN_BIN}" -d --default-user "${DEFAULT_USER}"
 
 run-docker: docker
+	@echo "Removing any existing Unix socket files for macOS Docker compatibility..."
+	rm -f ${DEV_DATADIR}/grpc-srv-to-org.sock ${DEV_DATADIR}/grpc-org-to-srv.sock
 	docker run --rm -it -p 127.0.0.1:8095:8095 --mount type=bind,source="$$(pwd)"/${DEV_DATADIR},target=/app/server/${DEV_DATADIR}  ${DOCKER_IMG_NAME}:latest
 
 run:

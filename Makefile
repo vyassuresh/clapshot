@@ -53,6 +53,8 @@ run-docker: debian-docker
 	# Add a simple test video to incoming already
 	mkdir -p test/VOLUME/data/incoming
 	cp server/src/tests/assets/60fps-example.mp4 test/VOLUME/data/incoming/
+	@echo "Removing any existing Unix socket files for macOS Docker compatibility..."
+	rm -f test/VOLUME/data/grpc-srv-to-org.sock test/VOLUME/data/grpc-org-to-srv.sock
 	docker run --rm -it -p 0.0.0.0:8080:80 --mount type=bind,source="$$(pwd)"/test/VOLUME,target=/mnt/clapshot-data  clapshot-comb
 
 
