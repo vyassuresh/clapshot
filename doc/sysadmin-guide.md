@@ -36,7 +36,7 @@ While the server uses mostly Websocket, there's a `/api/health` endpoint that ca
 ### Database upgrades
 
 Running a new version of Clapshot Server (and/or Organizer) will often upgrade database schemas on first start.
-See [upgrading.md](Upgrading Guid) for details about upgrading.
+See [upgrading.md](upgrading.md) for details about upgrading.
 
 ### Advanced Authentication
 
@@ -60,3 +60,50 @@ If you want to use Kerberos, you may also want to check out https://github.com/e
 for .deb packages.
 
 There are currently no demos for any of these more advanced auths (`vouch-proxy` example for Okta, Google etc. would be especially welcome, if you want to contribute!).
+
+### Monitored Folder Ingestion
+
+Clapshot automatically processes media files dropped into the monitored incoming folder. This system enables batch uploads and integration with external tools or workflows.
+
+#### Configuration
+
+The incoming folder monitoring is configured via command-line options:
+
+- `--data-dir <path>` - Base directory containing the `incoming/` subdirectory (default: current directory)
+- `--poll <seconds>` - Polling interval for checking new files (default: 3.0 seconds)
+- `--workers <count>` - Number of parallel workers for media processing (default: CPU core count)
+- `--bitrate <mbps>` - Target maximum bitrate for transcoding (default: 2.5 Mbps)
+
+#### Directory Structure
+
+```
+<data_dir>/
+├── incoming/          # Drop files here for automatic processing
+├── videos/           # Processed media storage (organized by media ID)
+├── rejected/         # Files that failed processing
+└── upload/           # Temporary storage for web uploads
+```
+
+#### How It Works
+
+1. **File Detection**: The system continuously polls `<data_dir>/incoming/` for new files
+2. **Write Completion**: Waits for file size to stabilize between polls to ensure upload completion
+3. **Owner Resolution**: Uses OS-level file ownership to determine the Clapshot user
+4. **User Assignment**: Files are assigned to users based on their OS username (e.g., file owned by `alice` becomes owned by Clapshot user `alice`)
+5. **Processing**: Files are moved to permanent storage, transcoded if needed, and added to the user's media library
+
+#### Important Notes
+
+- **OS Username Mapping**: The system directly maps OS file owners to Clapshot user IDs with no translation layer. Note that for web uploads, Clapshot server trusts the reverse proxy's HTTP headers for both username and display name, so any user mappings should happen at the proxy level.
+- **User Auto-Creation**: If a user doesn't exist in the database, they are automatically created when their first file is processed
+- **No Subdirectories**: Only files in the top-level `incoming/` directory are processed (subdirectories are ignored)
+- **Error Handling**: Files that fail processing are moved to the `rejected/` directory with error details
+- **Duplicate Prevention**: The system prevents re-processing of identical files using content-based hashing
+
+#### Security Considerations
+
+Since user assignment is based on file system ownership, ensure that:
+- File system permissions align with your desired user access model
+- OS usernames match your intended Clapshot user identifiers
+- The incoming directory has appropriate write permissions for authorized users
+- Consider using group ownership and umask settings for shared environments

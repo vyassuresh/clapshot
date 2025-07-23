@@ -166,12 +166,12 @@ CORS issues typically affect [Phase 4: Thumbnail Retrieval](architecture-overvie
 **Solutions:**
 
 - **For production:**
-```
+```ini
 cors = 'https://yourdomain.com'
 ```
 
 - **For development:**
-```
+```ini
 cors = '*'
 ```
 
@@ -272,7 +272,7 @@ The main difference is how these components are packaged and configured. See [Ar
 
 ### Working Docker Compose Example
 
-```yml
+```yaml
 version: '3.8'
 
 services:

@@ -12,15 +12,18 @@ Clapshot is an open-source, self-hosted tool for collaborative video/media revie
 
 ### Key Features
 
-- Video, audio and image files + subtitle tracks
-- Ingest media via HTTP uploads or shared folders
-- Transcoding (if needed) with FFmpeg
-- Commenting, drawing annotations, and threaded replies
-- Real-time collaborative review sessions
-- Support EDL import as comments, loop between them
-- Stores media files on disk and metadata in an SQLite (3.5+) database
-- Authentication agnostic, you can use *OAuth, JWS, Kerberos, Okta* etc., using Nginx username pass-through
-- **[NEW]** Extensible "Organizer" plugins for custom integrations, workflow, and access control
+- **Media Support**: Video, audio and image files with subtitle track management
+- **Media Ingestion**: HTTP uploads with progress tracking, or monitored folder processing (files assigned by OS ownership)
+- **Video Player**: Loop region control (i/o shortcuts), frame-by-frame navigation, comprehensive keyboard shortcuts
+- **Collaborative Review**: Real-time synchronized playback, drawing annotations with 7-color palette, threaded comments
+- **Professional Tools**: EDL import as time-coded comments, drawing undo/redo, timeline comment pins
+- **File Organization**: Hierarchical folder system with drag-and-drop, admin user management interface
+- **Media Processing**: FFmpeg transcoding with configurable quality, thumbnail generation
+- **Authentication**: Reverse proxy integration supporting OAuth, JWT, Kerberos, SAML, etc.
+- **Storage**: SQLite database with automatic migrations, file-based media storage
+- **Extensibility**: Plugin system for custom workflows and integrations
+
+*For a comprehensive feature list, see [FEATURES.md](FEATURES.md).*
 
 ### When not to use Clapshot
 
@@ -44,12 +47,13 @@ docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo:/mnt/clapshot-data/data 
 docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo-htadmin:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htadmin
 ```
 
-
 After the Docker image starts, access the web UI at `http://127.0.0.1:8080`.
 
-The basic auth multi-user demo uses [PHP htadmin](https://github.com/soster/htadmin) for user management. Default credentials are shown in the terminal.
+**Testing the demo:** Upload video/audio/image files via the web interface, or drop files into the container's `/mnt/clapshot-data/data/incoming/` directory for automatic processing. Try the keyboard shortcuts: spacebar (play/pause), 'i'/'o' (set loop points), 'l' (toggle loop), arrow keys (frame stepping).
 
-> **Note:** If accessing from a different machine or using a different port, you'll need to configure the `CLAPSHOT_URL_BASE` environment variable. See the [Quick Start Reference](doc/quick-start-reference.md) for common deployment scenarios.
+The multi-user demo uses [PHP htadmin](https://github.com/soster/htadmin) for user management. Default credentials are shown in the terminal.
+
+> **Note:** Chrome/Chromium works best. If accessing from a different machine, configure the `CLAPSHOT_URL_BASE` environment variable. See the [Quick Start Reference](doc/quick-start-reference.md) for common deployment scenarios.
 
 
 ## Simple Small-business Production Deployments
@@ -68,6 +72,8 @@ how to install and configure a Debian 12 host for Clapshot:
 
 If you want to expose this to the Internet, you'll probably want to get HTTPS certificates with Let's Encrypt and use some reverse proxy to encrypt Clapshot traffic.
 
+> **Security Note:** Monitored folder ingestion assigns files to users based on OS file ownership. Ensure file system permissions align with your intended user access model before enabling this feature.
+
 ### 2. Docker + Cloudflare (make public on the Web)
 
 In this option, you'll run Clapshot + Htadmin in a Docker container (binding a local directory for Clapshot data),
@@ -83,6 +89,8 @@ The same process can be adapted to any other *HTTPS-Proxy-as-a-Service* besides 
 
 **New to Clapshot?** Start with the [Quick Start Reference](doc/quick-start-reference.md) for common deployment scenarios.
 
+You can also interrogate [Clapshot Config Helper GPT](https://chatgpt.com/g/g-687debd7cfec8191ad14f604552f0121-clapshot-config-helper) that has technical knowledge of the project and custom instructions to assist.
+
 See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on:
 
 - configuring Nginx reverse proxy (for HTTPS and auth)
@@ -91,11 +99,11 @@ See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on:
 - implementing advanced authentication methods
 - building manually and running unit tests
 
-See [Upgrading Guide](doc/upgrading.md) for instructions on installing a new release over an old one.
 
 **Having connection issues?** See the [Connection Troubleshooting Guide](doc/connection-troubleshooting.md) for help with common deployment and connectivity problems.
 
-For help, you can also interrogate [Clapshot Config Helper GPT](https://chatgpt.com/g/g-687debd7cfec8191ad14f604552f0121-clapshot-config-helper) that has technical knowledge of the project and custom instructions to assist.
+See [Upgrading Guide](doc/upgrading.md) for instructions on installing a new release over an old one.
+
 
 ## Architecture Overview
 
@@ -107,9 +115,9 @@ Main components:
 
 Production deployments also depend on:
 
-- **Web Browser** – Chrome works best. Loads and shows the Client.
+- **Web Browser** – Chrome/Chromium recommended for best compatibility. Loads and shows the Client.
 - **Nginx Web Server** – SSL reverse proxy between Client and Server + static asset delivery for browser. Also routes session auth to Authentication Proxy.
-- **Authentication Proxy** – Any auxilliary HTTP daemon that authenticates users and return a **user id** and **username** in HTTP headers. In the demo, this is `/var/www/.htpasswd` + [PHP htadmin](https://github.com/soster/htadmin), but you can also use combinations like [Okta](https://www.okta.com/) + [Vouch](https://github.com/vouch/vouch-proxy) + [LDAP Authz Proxy](https://github.com/elonen/ldap_authz_proxy) or something equally advanced.
+- **Authentication Proxy** – Any auxiliary HTTP daemon that authenticates users and returns a **user id** and **username** in HTTP headers. In the demo, this is `/var/www/.htpasswd` + [PHP htadmin](https://github.com/soster/htadmin), but you can also use combinations like [Okta](https://www.okta.com/) + [Vouch](https://github.com/vouch/vouch-proxy) + [LDAP Authz Proxy](https://github.com/elonen/ldap_authz_proxy) or something equally advanced.
 
 - **Sqlite DB** – Stores metadata, comments, user messages etc. Both Clapshot Server and Organizer(s) access this. This is just a file, not a daemon.
 - **ffmpeg** and **mediainfo** – Clapshot Server processes media files with these commands.
@@ -117,20 +125,18 @@ Production deployments also depend on:
 
 See [sequence diagram](doc/generated/open-frontpage-process.svg) for details on how these interact when a user opens the main page.
 
-## Organizer Plugin System (New in 0.6.0):
-Clapshot now includes an extensible [Organizer Plugin system](doc/organizer-plugins.md). Organizer can implement custom UIs, virtual folders, enforce access control based on your business logic, and integrate with existing systems (LDAP, project management databases, etc).
+## Organizer Plugin System
 
-Organizers use gRPC to communicate with the Clapshot Server, and can be implemented in any language.
+Clapshot includes an extensible [Organizer Plugin system](doc/organizer-plugins.md) that enables custom workflows and integrations. Organizers use gRPC communication and can be implemented in any language.
 
-The provided default/example organizer, called “[basic_folders](organizer/basic_folders/README.md)” (in *Python*), implements:
- - personal hierarchical folders for organizing media files
-  - implicit sharing of individual videos by sharing their ID / URL
- - read-only folder sharing via secure URLs (for sharing multiple videos more easily)
- - administrative tools for managing users and their folder contents
+The included "[basic_folders](organizer/basic_folders/README.md)" organizer (Python) provides:
+- **Hierarchical Folders**: Personal folder structures for organizing media files
+- **Folder Sharing**: Secure token-based sharing of folder contents (requires authentication)
+- **Admin Interface**: User management with batch operations and ownership transfer
+- **Access Control**: Permission boundaries and cross-user navigation for administrators
 
-### Work In Progress
+Custom organizers can integrate with existing systems (LDAP, project management databases, etc.) through custom development.
 
-The [Organizer API](protobuf/proto/organizer.proto) is still evolving, so you are invited to **provide feedback** and discuss future development. However, please **do not expect backward compatibility** for now.
 
 ## Development Setup
 

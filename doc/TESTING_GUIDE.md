@@ -116,7 +116,7 @@ Clapshot is a multi-component system designed for collaborative video/media revi
 
 **5. Database Layer**
 
-- **Technology**: SQLite 3.5+ with migrations
+- **Technology**: SQLite with migrations
 - **Schema Management**: Diesel migrations (Rust) + custom organizer migrations
 - **Key Tables**:
   - `media_files` - Core media metadata
