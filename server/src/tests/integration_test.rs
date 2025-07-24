@@ -665,7 +665,18 @@ mod integration_test
                 println!("\n\n^^^ (that was just a call listing organizer tests, now running them...) ^^^");
 
                 // Call gRPC run_test() for each test name. Store results in test_results.
-                let test_names: Vec<String> = test_names.lock().unwrap().iter().map(|s| s.clone()).collect();
+                let mut test_names: Vec<String> = test_names.lock().unwrap().iter().map(|s| s.clone()).collect();
+                
+                // Check for TEST_ORG_FILTER environment variable to filter tests
+                if let Some(filter) = std::env::var("TEST_ORG_FILTER").ok().filter(|s| !s.is_empty()) {
+                    write_log(&log, format!("    Filtering tests with pattern: '{}'", filter).as_str());
+                    test_names.retain(|name| name.contains(&filter));
+                    if test_names.is_empty() {
+                        write_log(&log, format!("    No tests match filter '{}'", filter).as_str());
+                        panic!("No organizer tests match the filter '{}'", filter);
+                    }
+                }
+                
                 write_log(&log, format!("    Running {} organizer tests", test_names.len()).as_str());
 
                 for (i, test_name) in test_names.iter().enumerate()

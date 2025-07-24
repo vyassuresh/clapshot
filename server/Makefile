@@ -69,11 +69,17 @@ debian-docker: docker
 test-local:
 	(cd ../organizer; make)
 
+	@if [ -z "${FILTER}" ]; then \
+		echo "!! Running all tests. To run specific tests, use: make test-local FILTER=\"pattern\""; \
+	else \
+		echo "!! Running tests matching filter: '${FILTER}'"; \
+	fi
+
 	@if [ "${CI}" ]; then \
 		echo "!! Running in CI: No-default-features = skip expensive tests"; \
-		cargo test --no-default-features | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"; \
+		cargo test --no-default-features ${FILTER} | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"; \
 	else \
-		cargo test | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"; \
+		cargo test ${FILTER} | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"; \
 	fi
 
 	@echo "---------- Testing Organizer ----------"
@@ -92,6 +98,7 @@ test-local:
 	set -o pipefail; \
 	TEST_ORG_CMD="../organizer/basic_folders/run-py-org.sh" \
 	TEST_ORG_LOG="$$LOGFILE" \
+	TEST_ORG_FILTER="${FILTER}" \
 	cargo test test_organizer | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)" || exit_code=$$?; \
 	cleanup; \
 	exit $${exit_code:-0}
