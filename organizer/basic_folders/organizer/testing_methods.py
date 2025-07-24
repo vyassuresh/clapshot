@@ -1859,6 +1859,99 @@ async def org_test__cmd_from_client__cleanup_empty_user_batch(oi: organizer.Orga
     print(f"✓ Cleaned up {users_deleted} users total ({len(test_users)} test + {pre_existing_empty_count} pre-existing)")
 
 
+async def org_test__admin_create_folder_in_user_context(oi: organizer.OrganizerInbound):
+    """
+    Test that when an admin creates a folder while viewing another user's folder,
+    the folder is created with the correct ownership (target user, not admin).
+    
+    This test checks for the bug where admin-created folders might end up 
+    in the admin's own context instead of the target user's context.
+    """
+    # Create two users - one regular user and one admin
+    with oi.db_new_session() as dbs:
+        regular_user_id = "folder.test.regular"
+        admin_user_id = "folder.test.admin"
+        dbs.add(DbUser(id=regular_user_id, name="Regular User"))
+        dbs.add(DbUser(id=admin_user_id, name="Admin User"))
+        dbs.commit()
+
+    # Create sessions for both users
+    regular_ses = org.UserSessionData(
+        sid="regular_sid",
+        user=clap.UserInfo(id=regular_user_id, name="Regular User"),
+        is_admin=False,
+        cookies={}
+    )
+
+    admin_ses = org.UserSessionData(
+        sid="admin_sid",
+        user=clap.UserInfo(id=admin_user_id, name="Admin User"),
+        is_admin=True,
+        cookies={}
+    )
+
+    # Create root folders for both users
+    with oi.db_new_session() as dbs:
+        regular_root = await db_get_or_create_user_root_folder(dbs, regular_ses.user, oi.srv, oi.log)
+        admin_root = await db_get_or_create_user_root_folder(dbs, admin_ses.user, oi.srv, oi.log)
+        
+        # Create a subfolder in regular user's space for testing
+        test_parent_folder = await oi.folders_helper.create_folder(dbs, regular_ses, regular_root, "User's Parent Folder")
+        regular_root_id = regular_root.id
+        test_parent_folder_id = test_parent_folder.id
+        admin_root_id = admin_root.id
+        dbs.commit()
+
+    # Admin navigates to the regular user's folder (simulating admin browsing another user's folders)
+    admin_ses.cookies[PATH_COOKIE_NAME] = json.dumps([regular_root_id, test_parent_folder_id])
+    
+    # Admin creates a new folder while viewing the regular user's folder
+    await oi.cmd_from_client(org.CmdFromClientRequest(
+        ses=admin_ses,
+        cmd="new_folder",
+        args='{"name": "Admin Created Folder"}'
+    ))
+
+    # Verify the folder was created
+    with oi.db_new_session() as dbs:
+        # Get all folders to check ownership
+        all_folders = dbs.query(DbFolder).all()
+        
+        # Find the newly created folder
+        admin_created_folder = None
+        for folder in all_folders:
+            if folder.title == "Admin Created Folder":
+                admin_created_folder = folder
+                break
+        
+        assert admin_created_folder is not None, "Admin created folder should exist"
+        
+        # Critical test: The folder should belong to the regular user, NOT the admin
+        print(f"Admin created folder owner: {admin_created_folder.user_id}")
+        print(f"Expected owner (regular user): {regular_user_id}")
+        print(f"Admin user ID: {admin_user_id}")
+        
+        assert admin_created_folder.user_id == regular_user_id, \
+            f"BUG DETECTED: Admin created folder belongs to admin ({admin_created_folder.user_id}) instead of target user ({regular_user_id})"
+        
+        # Verify the folder appears in the regular user's folder structure
+        test_parent_folder_refreshed = dbs.query(DbFolder).filter_by(id=test_parent_folder_id).first()
+        folder_contents = await oi.folders_helper.fetch_folder_contents(test_parent_folder_refreshed, regular_ses)
+        
+        created_folders = [fi for fi in folder_contents if isinstance(fi, DbFolder) and fi.title == "Admin Created Folder"]
+        assert len(created_folders) == 1, "Admin created folder should appear in regular user's folder structure"
+        
+        # Double-check: verify the folder does NOT appear in admin's own folder structure
+        admin_root_refreshed = dbs.query(DbFolder).filter_by(id=admin_root_id).first()
+        admin_folder_contents = await oi.folders_helper.fetch_folder_contents(admin_root_refreshed, admin_ses)
+        
+        admin_folders = [fi for fi in admin_folder_contents if isinstance(fi, DbFolder) and fi.title == "Admin Created Folder"]
+        assert len(admin_folders) == 0, "Admin created folder should NOT appear in admin's own folder structure"
+        
+        print("✓ Test passed: Admin created folder has correct ownership and location")
+        print(f"✓ Folder 'Admin Created Folder' correctly belongs to user '{regular_user_id}' (not admin '{admin_user_id}')")
+
+
 # TODO: JavaScript action validation testing?
 # Consider adding validation for generated JavaScript code in actiondefs.py to catch:
 # - Syntax errors in generated JavaScript snippets

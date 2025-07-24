@@ -156,7 +156,7 @@ class FoldersHelper:
                                 self.log.debug(f"User's root folder ({user_root_folder.id}) not in path, adding it to the start.")
                                 path_folders.insert(0, user_root_folder)
 
-                            return path_folders, user_root_folder
+                            return path_folders, path_folders[-1]
                         else:
                             self.log.warning("Mixed ownership in folder path. Clearing path cookie.")
                             await self._clear_path_cookie(ses)
