@@ -6,12 +6,12 @@ Clapshot is a self-hosted video/media review and annotation platform designed fo
 
 ### **Video Player**
 Video player with playback controls and navigation features.
-  - **Loop Region Control**: Set custom loop in/out points with 'i'/'o' keyboard shortcuts and visual timeline indicators
+  - **Loop Region Control**: Set custom loop in/out points with `i`/`o` keyboard shortcuts and visual timeline indicators
   - **Frame-by-Frame Navigation**: Frame stepping with arrow keys
-  - **Keyboard Shortcuts**: Control system (spacebar play/pause, 'l' toggle loop, 'z'/'y' undo/redo)
+  - **Keyboard Shortcuts**: Control system (spacebar play/pause, `l` toggle loop, `z`/`y` undo/redo)
   - **SMPTE Timecode Display**: Timecode format with editable timecode fields for seeking
   - **Audio Waveform Visualization**: Waveform display for audio files with click-to-seek
-  - **Volume Control**: Volume settings saved to local storage with slider control
+  - **Volume Control**: Volume settings with slider control (saved to browser local storage) 
 - *References: [src1](client/src/lib/player_view/VideoPlayer.svelte), [src2](client/src/lib/player_view/CommentTimelinePin.svelte), [src3](client/src/lib/asset_browser/ScrubbableVideoThumb.svelte)*
 
 ### **Comment System**
@@ -42,36 +42,17 @@ File handling with progress tracking and thumbnail generation.
   - **Media Type Indicators**: FontAwesome icons for video, audio, image, and unknown types
 - *References: [src1](client/src/lib/asset_browser/FileUpload.svelte), [src2](client/src/lib/asset_browser/ScrubbableVideoThumb.svelte)*
 
-### **Action System**
-Context-sensitive action framework with popup menus and scripting capabilities.
-  - **Popup Menus**: Context-aware actions based on item type, permissions, and sharing status
-  - **JavaScript Action Scripting**: Client-side scripting capabilities for custom workflows
-  - **Action Visibility**: Actions appear/disappear based on folder context
-  - **Keyboard Shortcuts**: Action definitions include keyboard shortcut support
-  - **Icons and Styling**: FontAwesome integration with custom colors
-  - **Permission-Aware Actions**: Actions filtered based on user permissions and ownership
-- *References: [src1](client/src/lib/asset_browser/PopupMenu.svelte), [src2](organizer/basic_folders/organizer/helpers/actiondefs.py)*
-
-### **Navigation and Breadcrumbs**
-Navigation system with cross-user capabilities and visual context indicators.
-  - **Cross-User Navigation**: Admin users can navigate between different users' folders
-  - **Shared Folder Indicators**: Visual cues (🔗 icons) showing when viewing shared content
-  - **Ownership Context**: Breadcrumb behavior when crossing ownership boundaries
-  - **Home Folder Detection**: "Home" labeling for user root folders
-  - **Secure Navigation**: XSS-safe clickable breadcrumb navigation with HTML escaping
-- *References: [src1](organizer/basic_folders/organizer/helpers/pages.py), [src2](client/src/lib/NavBar.svelte)*
-
 ### **Real-Time Collaboration**
-Shared viewing sessions with synchronized playback, seeking, and annotation across multiple users. Generate shareable links for collaborative review sessions.
+Shared remote viewing sessions with synchronized playback, seeking, and annotation across multiple users. Generate shareable links for collaborative review sessions. Meant to be used during a conference call or such.
 - *References: [src1](client/src/lib/player_view/VideoPlayer.svelte), [src2](server/src/api_server/ws_handers.rs)*
 
-### **Subtitle Track Management**
+### **Subtitle Tracks**
 Upload, and synchronize multiple subtitle files.
-- *References: [src1](client/src/lib/player_view/SubtitleCard.svelte), [src2](server/migrations/2024-06-02-173200_add_subtitles/)*
+- *References: [src1](client/src/lib/player_view/SubtitleCard.svelte), [sql](server/migrations/2024-06-02-173200_add_subtitles/)*
 
 ### **EDL Import**
-Import Edit Decision Lists as time-coded comments for professional video editing workflows.
-- *References: [src1](client/src/lib/tools/EDLImport.svelte), [src2](server/src/tests/assets/red-lettuce.edl)*
+Import Edit Decision Lists as time-coded comments.
+- *References: [Example EDL](server/src/tests/assets/red-lettuce.edl), [src1](client/src/lib/tools/EDLImport.svelte)*
 
 ## Media Processing
 
@@ -100,11 +81,33 @@ Rust-based server with concurrent processing for media operations.
 Bitrate transcoding with customizable quality settings.
 - *References: [src1](server/src/video_pipeline/ffmpeg_processor.rs)*
 
-### **File Storage**
-Organized file system layout with cleanup and storage management.
+### **Special `trash/` and `rejected/` folders**
+Special folders for "deleted" (trashed) and non-ingestible files.
 - *References: [src1](server/src/video_pipeline/cleanup_rejected.rs)*
 
-## Organizer Plugin(s)
+## Organizer Plugin system
+
+### **Workflow Plugin Architecture ("Organizer")**
+Extensible Organizer plugin system using gRPC for custom workflows and integrations (for custom integrations of things like LDAP, project management systems, and external databases).
+- *References: [doc/organizer-plugins.md](doc/organizer-plugins.md), [protobuf/proto/organizer.proto](protobuf/proto/organizer.proto)*
+
+### **Multi-Language gRPC Libraries for Organizers**
+Support for plugins in Python, Rust, and TypeScript with gRPC bindings.
+- *References: [protobuf/libs/](protobuf/libs/), [organizer/basic_folders/](organizer/basic_folders/)*
+
+### **Popyp Action System**
+Context-sensitive action framework with popup menus and scripting capabilities.
+  - **Popup Menus**: Context-aware actions based on item type, permissions, and sharing status
+  - **JavaScript Action Scripting**: Client-side scripting capabilities for custom workflows
+- *References: [src1](client/src/lib/asset_browser/PopupMenu.svelte), [src2](organizer/basic_folders/organizer/helpers/actiondefs.py)*
+
+### **Custom UI Integration**
+Plugin system supports custom HTML and JavaScript for tailored user interfaces (folder views, virtual folders, custom popup actions)
+- *References: [doc/organizer-plugins.md](doc/organizer-plugins.md), [src1](organizer/basic_folders/organizer/helpers/pages.py)*
+
+## Default `basic_folders` Organizer
+
+Clapshot comes with a default / example Organizer called `basic_folders` that provides the following extra functionality compared to the plain Server:
 
 ### **Folder Management System**
 File organization with hierarchical folders and basic administrative controls.
@@ -127,50 +130,31 @@ Sharing system with security controls and access management.
   - **Cleanup**: Share tokens cleaned up when folders are deleted
 - *References: [src1](organizer/basic_folders/organizer/folder_op_methods.py), [src2](organizer/basic_folders/organizer/helpers/folders.py)*
 
-### **Drag-and-Drop Interface**
-File management with drag-and-drop operations for organizing content.
-- *References: [src1](client/src/lib/asset_browser/FolderListing.svelte), [src2](client/src/__tests__/lib/asset_browser/FolderListingDragDrop.unit.test.ts)*
-
-### **Plugin Architecture ("Organizer")**
-Extensible organizer plugin system using gRPC for custom workflows and integrations (custom development required for LDAP, project management systems, and external databases).
-- *References: [doc/organizer-plugins.md](doc/organizer-plugins.md), [protobuf/proto/organizer.proto](protobuf/proto/organizer.proto)*
-
-### **Multi-Language gRPC Libraries for Organizers**
-Support for plugins in Python, Rust, and TypeScript with gRPC bindings.
-- *References: [protobuf/libs/](protobuf/libs/), [organizer/basic_folders/](organizer/basic_folders/)*
-
-### **Custom UI Integration**
-Plugin system supports custom HTML and JavaScript for tailored user interfaces.
-- *References: [doc/organizer-plugins.md](doc/organizer-plugins.md), [src1](organizer/basic_folders/organizer/helpers/pages.py)*
-
-## Administration
-
-### **User Management and Access Control**
-User administration with permission management and lifecycle controls.
-  - **Admin Folder View**: Admin interface showing all user home folders with management capabilities
-  - **User Cleanup System**: Detection and removal of empty users with batch operations
-  - **Ownership Transfer**: User ownership change when moving content between user folders
-  - **Permission Boundaries**: Prevention of unauthorized cross-user operations
-  - **User Lifecycle Management**: User deletion that preserves comments via database triggers
-  - **Cross-User Navigation**: Admin users can navigate and manage any user's content
-  - **User Indicators**: User icons and styling in admin folder views
-- *References: [src1](server/migrations/2024-05-13-093800_add_users_table/), [src2](organizer/basic_folders/organizer/user_session_methods.py), [src3](organizer/basic_folders/organizer/helpers/pages.py), [src4](organizer/basic_folders/organizer/folder_op_methods.py)*
+## Administration and security
 
 ### **Authentication-Agnostic Design**
 Works with authentication systems through reverse proxy integration (requires proxy configuration for OAuth, LDAP, Kerberos, SAML, etc.).
 - *References: [doc/sysadmin-guide.md](doc/sysadmin-guide.md), [clapshot+htadmin.nginx.conf](client/debian/additional_files/clapshot+htadmin.nginx.conf)*
 
-### **Secure File Sharing**
-Token-based sharing system for controlled access to media files and folders.
-- *References: [src1](organizer/basic_folders/organizer/folder_op_methods.py)*
+### **Automatic User Create**
+Clapshot creates a user and a folder for them every time a new username is encountered in reverse proxy HTTP headers.
 
-### **Docker Deployment**
-Pre-configured Docker images for easy deployment with multiple authentication options.
-- *References: [README.md](README.md), [Dockerfile.demo](Dockerfile.demo), [test/run-cloudflare.sh](test/run-cloudflare.sh)*
+### **Admin Views**
+Administrator users (specified by HTTP headers, again) can edit users and their content:
+  - **Admin Folder View**: Admin interface showing all user home folders with management capabilities
+  - **Cross-User Navigation**: Admin users can navigate and manage any user's content
+  - **Ownership Transfer**: User ownership change when moving content between user folders
+  - **User Cleanup System**: Detection and removal of empty users with manual (per-user) or batch cleanup.
+  - **Safe delete**: User delete declines if the user still has files. Comments are preserved even after user is deleted.
+- *References: [src1](server/migrations/2024-05-13-093800_add_users_table/), [src2](organizer/basic_folders/organizer/user_session_methods.py), [src3](organizer/basic_folders/organizer/helpers/pages.py), [src4](organizer/basic_folders/organizer/folder_op_methods.py)*
 
 ### **Debian Package Installation**
 Native Debian packages for production deployment with systemd integration.
 - *References: [doc/sysadmin-guide.md](doc/sysadmin-guide.md), [Makefile](Makefile), [server/debian/](server/debian/)*
+
+### **Docker Deployment Examples**
+Pre-configured Docker images for easy deployment with multiple authentication options.
+- *References: [README.md](README.md), [Dockerfile.demo](Dockerfile.demo), [test/run-cloudflare.sh](test/run-cloudflare.sh)*
 
 ### **Nginx Reverse Proxy Examples**
 Complete Nginx configuration examples for HTTPS, authentication, and static file serving.
@@ -187,13 +171,13 @@ SQLite-based storage with integrity monitoring and maintenance capabilities.
 - *References: [src1](server/src/database/migration_solver.rs), [src2](server/src/database/db_backup.rs), [src3](organizer/basic_folders/organizer/database/operations.py), [src4](organizer/basic_folders/organizer/database/migrations.py)*
 
 ### **Health Monitoring**
-Built-in health check endpoint and comprehensive logging for system monitoring.
+Health check endpoint, and adjustable verbosity logging for system monitoring.
 - *References: [doc/sysadmin-guide.md](doc/sysadmin-guide.md), [src1](server/src/api_server/mod.rs)*
 
 ## Development
 
-### **Test Suite**
-Test coverage with testing infrastructure across components.
+### **Test Suites**
+Automated testing infrastructure across components:
   - **Client-Side Testing**: Unit tests, integration tests, and end-to-end testing with Vitest framework
   - **Server-Side Testing**: Rust-based unit and integration tests with asset-based testing
   - **Plugin Testing Framework**: Organizer plugin testing with test discovery
