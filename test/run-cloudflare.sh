@@ -141,7 +141,17 @@ elif [ "$(docker ps -aq -f status=exited -f name=$CLAPSHOT_HOST_CONTAINER)" ]; t
     docker rm $CLAPSHOT_HOST_CONTAINER
 fi
 echo "Starting new container $CLAPSHOT_HOST_CONTAINER"
-docker run -d --name $CLAPSHOT_HOST_CONTAINER --mount type=bind,source=$LOCAL_DATA_DIR,target=/mnt/clapshot-data/data --network $NETWORK_NAME -e CLAPSHOT_URL_BASE="$CLOUDFLARED_URL" $CLAPSHOT_DOCKER_IMAGE
+
+# Build environment variable arguments for all CLAPSHOT_SERVER__ variables
+ENV_ARGS=""
+for var in $(env | grep '^CLAPSHOT_SERVER__' | cut -d= -f1); do
+    ENV_ARGS="$ENV_ARGS -e $var=${!var}"
+done
+
+# Always set URL_BASE and CORS to Cloudflare URL (override any existing values)
+ENV_ARGS="$ENV_ARGS -e CLAPSHOT_SERVER__URL_BASE=$CLOUDFLARED_URL -e CLAPSHOT_SERVER__CORS=$CLOUDFLARED_URL"
+
+docker run -d --name $CLAPSHOT_HOST_CONTAINER --mount type=bind,source=$LOCAL_DATA_DIR,target=/mnt/clapshot-data/data --network $NETWORK_NAME $ENV_ARGS $CLAPSHOT_DOCKER_IMAGE
 
 
 # Start tailing the logs

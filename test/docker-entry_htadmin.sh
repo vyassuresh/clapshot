@@ -4,19 +4,108 @@
 # in a single Docker container for demo and testing purposes.
 
 DIR="/mnt/clapshot-data/data"
-URL_BASE=$(echo "${CLAPSHOT_URL_BASE:-http://127.0.0.1:8080/}" | sed 's#/*$#/#')
-CORS="${CLAPSHOT_CORS:-$URL_BASE}"  # Default to URL_BASE
+
+# URL_BASE: normalize trailing slash
+if [ -z "${CLAPSHOT_SERVER__URL_BASE}" ]; then
+    # Try legacy env var CLAPSHOT_URL_BASE first, then default to localhost if not set
+    export CLAPSHOT_SERVER__URL_BASE=$(echo "${CLAPSHOT_URL_BASE:-http://127.0.0.1:8080/}" | sed 's#/*$#/#')
+else
+    export CLAPSHOT_SERVER__URL_BASE=$(echo "${CLAPSHOT_SERVER__URL_BASE}" | sed 's#/*$#/#')
+fi
+
+# CORS: try legacy env var CLAPSHOT_CORS first, then default to URL_BASE
+if [ -z "${CLAPSHOT_SERVER__CORS}" ]; then
+    export CLAPSHOT_SERVER__CORS="${CLAPSHOT_CORS:-${CLAPSHOT_SERVER__URL_BASE}}"
+fi
 
 APP_TITLE="${CLAPSHOT_APP_TITLE:-Clapshot}"
 LOGO_URL="${CLAPSHOT_LOGO_URL:-clapshot-logo.svg}"
 
-# Use same URL base as index.html for API server (as Nginx proxies localhost:8095/api to /api)
-# - Also enable basic auth logout button
-WS_BASE=$(echo "$URL_BASE" | sed 's#^http#ws#')
+# ============================================================================
+# DOCKER ENVIRONMENT VARIABLE TO CONFIG FILE CONVERTER
+# ============================================================================
+#
+# This function allows users to override ANY Clapshot server configuration
+# option using Docker environment variables, without needing to mount custom
+# config files or rebuild images.
+#
+# HOW IT WORKS:
+# 1. Scans environment for variables starting with CLAPSHOT_SERVER__
+# 2. Converts variable names to config file format:
+#    CLAPSHOT_SERVER__INGEST_USERNAME_FROM → ingest-username-from
+# 3. Updates the config file by either:
+#    - Replacing existing values (even if commented out with #)
+#    - Adding new options if they don't exist
+#
+# EXAMPLES:
+#   docker run -e CLAPSHOT_SERVER__DEBUG=true image
+#   → Sets "debug = true" in config file
+#
+#   docker run -e CLAPSHOT_SERVER__INGEST_USERNAME_FROM=folder-name image
+#   → Sets "ingest-username-from = folder-name" in config file
+# ============================================================================
+update_config_from_env() {
+    local config_file="$1"
+
+    # Function to process environment variable and update config
+    process_env_var() {
+        local env_var="$1"
+        local env_value="$2"
+        local prefix="$3"
+
+        # Convert ENV_VAR_NAME to config-key-name
+        config_key=$(echo "$env_var" | sed "s/^$prefix//" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+
+        echo "Setting config: $config_key = $env_value"
+
+        # Escape special characters in the value for sed
+        escaped_value=$(printf '%s\n' "$env_value" | sed 's/[[\.*^$(){}?+|/]/\\&/g')
+
+        # Update or add the config option (handle both commented and uncommented)
+        if grep -q "^#*$config_key" "$config_file"; then
+            # Update existing option (remove # if commented)
+            sed -i "s/^#*$config_key.*/$config_key = $escaped_value/g" "$config_file"
+        else
+            # Add new option under [general] section
+            sed -i '/^\[general\]$/a\'"$config_key = $escaped_value" "$config_file"
+        fi
+    }
+
+    # Process new CLAPSHOT_SERVER__ variables (preferred)
+    env | grep '^CLAPSHOT_SERVER__' | while IFS='=' read -r env_var env_value; do
+        process_env_var "$env_var" "$env_value" "CLAPSHOT_SERVER__"
+    done
+
+    # Process legacy variables for backward compatibility
+    # Only process if no CLAPSHOT_SERVER__ equivalent exists
+    process_legacy_var() {
+        local legacy_var="$1"
+        local new_var="CLAPSHOT_SERVER__$(echo "$1" | sed 's/^CLAPSHOT_//')"
+
+        # Only use legacy if new variable is not set
+        if [ -n "${!legacy_var}" ] && [ -z "${!new_var}" ]; then
+            echo "Using legacy variable $legacy_var (consider migrating to $new_var)"
+            process_env_var "$legacy_var" "${!legacy_var}" "CLAPSHOT_"
+        fi
+    }
+
+    # Backward compatibility for existing variables
+    process_legacy_var "CLAPSHOT_URL_BASE"
+    process_legacy_var "CLAPSHOT_CORS"
+    process_legacy_var "CLAPSHOT_DATA_DIR"
+    process_legacy_var "CLAPSHOT_DEBUG"
+    process_legacy_var "CLAPSHOT_BITRATE"
+}
+
+# Apply all environment variable config overrides (both new and legacy)
+update_config_from_env /etc/clapshot-server.conf
+
+# Use the processed URL base for client config
+WS_BASE=$(echo "${CLAPSHOT_SERVER__URL_BASE}" | sed 's#^http#ws#')
 cat > /etc/clapshot_client.conf << EOF
 {
-  "ws_url": "${URL_BASE}api/ws",
-  "upload_url": "${URL_BASE}api/upload",
+  "ws_url": "${CLAPSHOT_SERVER__URL_BASE}api/ws",
+  "upload_url": "${CLAPSHOT_SERVER__URL_BASE}api/upload",
     "user_menu_extra_items": [
         { "label": "My Videos", "type": "url", "data": "/" }
     ],
@@ -25,15 +114,6 @@ cat > /etc/clapshot_client.conf << EOF
   "app_title": "${APP_TITLE}"
 }
 EOF
-
-# Assume user accesses this at $URL_BASE
-sed -i "s@^url-base.*@url-base = ${URL_BASE}@g" /etc/clapshot-server.conf
-
-if grep -q '^cors' /etc/clapshot-server.conf; then
-  sed -i "s/^cors.*/cors = '$CORS'/g" /etc/clapshot-server.conf
-else
-  echo "cors = '$CORS'" >> /etc/clapshot-server.conf
-fi
 
 
 # Make server data dir and log accessible to docker user
@@ -64,8 +144,8 @@ cat <<- "EOF"
 EOF
 
 cat <<-EOF
----  Browse ${URL_BASE}          for Clapshot
----  or     ${URL_BASE}htadmin/  for user management
+---  Browse ${CLAPSHOT_SERVER__URL_BASE}          for Clapshot
+---  or     ${CLAPSHOT_SERVER__URL_BASE}htadmin/  for user management
 ---
 ---  Default users:
 ---   - admin:admin     (can edit other people's videos)

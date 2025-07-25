@@ -124,3 +124,98 @@ User assignment security depends on the chosen method:
 - **File Permissions**: Files must be writable by the OS user running Clapshot Server (often `www-data`) so they can be moved during processing. Use group ownership with sticky bits or appropriate umask settings (e.g., `chmod g+s incoming/` and ensure uploaded files have group write permissions)
 - Consider that any user who can create directories in `incoming/` can impersonate other users
 - This mode is ideal for (S)FTP scenarios where you control directory creation through the FTP server configuration
+
+### Docker Environment Configuration
+
+Clapshot's Docker demo containers support comprehensive configuration via environment variables, allowing you to customize server behavior without rebuilding images or mounting custom config files.
+
+#### Variable Naming Convention
+
+Use the `CLAPSHOT_SERVER__` prefix with uppercase and underscores:
+
+```bash
+CLAPSHOT_SERVER__OPTION_NAME=value
+```
+
+The system automatically converts these to config file format:
+- `CLAPSHOT_SERVER__INGEST_USERNAME_FROM` → `ingest-username-from`
+- `CLAPSHOT_SERVER__DEBUG` → `debug`
+- `CLAPSHOT_SERVER__URL_BASE` → `url-base`
+
+#### Common Configuration Examples
+
+**Basic Setup:**
+```bash
+# Single-user demo with custom URL
+docker run --rm -it -p 8080:80 \
+  -e CLAPSHOT_SERVER__URL_BASE=http://clapshot.example.com/ \
+  -v clapshot-demo:/mnt/clapshot-data/data \
+  elonen/clapshot:latest-demo
+```
+
+**Folder-based Username Assignment:**
+```bash
+# Multi-user demo with folder-based usernames for SFTP support
+docker run --rm -it -p 8080:80 \
+  -e CLAPSHOT_SERVER__INGEST_USERNAME_FROM=folder-name \
+  -e CLAPSHOT_SERVER__URL_BASE=http://clapshot.example.com/ \
+  -v clapshot-demo:/mnt/clapshot-data/data \
+  elonen/clapshot:latest-demo-htadmin
+```
+
+**Development Configuration:**
+```bash
+# Enable debug logging and custom bitrate
+docker run --rm -it -p 8080:80 \
+  -e CLAPSHOT_SERVER__DEBUG=true \
+  -e CLAPSHOT_SERVER__BITRATE=5.0 \
+  -e CLAPSHOT_SERVER__WORKERS=4 \
+  -v clapshot-demo:/mnt/clapshot-data/data \
+  elonen/clapshot:latest-demo
+```
+
+#### Available Configuration Options
+
+All options from the server config file are supported. Most commonly used:
+
+| Environment Variable | Description | Default |
+|---------------------|-------------|---------|
+| `CLAPSHOT_SERVER__URL_BASE` | User-facing URL | `http://127.0.0.1:8080` |
+| `CLAPSHOT_SERVER__DATA_DIR` | Database and media location | `/mnt/clapshot-data/data` |
+| `CLAPSHOT_SERVER__INGEST_USERNAME_FROM` | Username assignment method | `file-owner` |
+| `CLAPSHOT_SERVER__DEBUG` | Enable verbose logging | `false` |
+| `CLAPSHOT_SERVER__BITRATE` | Transcoding bitrate (Mbps) | `2.5` |
+| `CLAPSHOT_SERVER__WORKERS` | Transcoding workers | `0` (auto) |
+| `CLAPSHOT_SERVER__POLL` | Incoming folder poll interval | `3` |
+| `CLAPSHOT_SERVER__CORS` | CORS origins | Same as `url-base` |
+
+For the complete list, see the [server configuration file](../server/debian/additional_files/clapshot-server.conf).
+
+**Client Configuration:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CLAPSHOT_APP_TITLE` | Application title | `Clapshot` |
+| `CLAPSHOT_LOGO_URL` | Logo image URL | `clapshot-logo.svg` |
+
+#### Docker Compose Example
+
+```yaml
+version: '3.8'
+services:
+  clapshot:
+    image: elonen/clapshot:latest-demo-htadmin
+    ports:
+      - "8080:80"
+    volumes:
+      - clapshot-data:/mnt/clapshot-data/data
+    environment:
+      - CLAPSHOT_SERVER__URL_BASE=http://localhost:8080/
+      - CLAPSHOT_SERVER__INGEST_USERNAME_FROM=folder-name
+      - CLAPSHOT_SERVER__DEBUG=false
+      - CLAPSHOT_SERVER__BITRATE=3.0
+      - CLAPSHOT_APP_TITLE=Company Media Review
+
+volumes:
+  clapshot-data:
+```

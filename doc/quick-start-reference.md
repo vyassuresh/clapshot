@@ -6,7 +6,7 @@ Quick reference for common Clapshot deployment scenarios. For detailed troublesh
 > 
 > Before you start, configure the base URL so Clapshot knows where clients will connect. Without this, browsers on other machines will keep retrying `127.0.0.1` and never reach your server!
 >
-> - **Docker:** Use `-e CLAPSHOT_URL_BASE="http://YOUR_IP:8080/"`
+> - **Docker:** Use `-e CLAPSHOT_SERVER__URL_BASE="http://YOUR_IP:8080/"`
 > - **Native install:** Edit `/etc/clapshot-server.conf` and set `url-base` and `cors` under `[general]`
 
 > **Architecture:** For detailed understanding of how Clapshot components communicate, see the [Architecture Overview](architecture-overview.md).
@@ -28,7 +28,7 @@ docker run --rm -it -p 8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/c
 # Replace YOUR_IP with your machine's LAN IP (e.g., 192.168.1.100)
 # Note: Also expose WebSocket port 8095 for live annotations
 docker run --rm -it -p 8080:80 -p 8095:8095 \
-  -e CLAPSHOT_URL_BASE="http://YOUR_IP:8080/" \
+  -e CLAPSHOT_SERVER__URL_BASE="http://YOUR_IP:8080/" \
   -v clapshot-demo:/mnt/clapshot-data/data \
   elonen/clapshot:latest-demo-htadmin
 
@@ -42,7 +42,7 @@ docker run --rm -it -p 8080:80 -p 8095:8095 \
 ```bash
 # Using port 8025 instead of 8080
 docker run --rm -it -p 8025:80 \
-  -e CLAPSHOT_URL_BASE="http://YOUR_IP:8025/" \
+  -e CLAPSHOT_SERVER__URL_BASE="http://YOUR_IP:8025/" \
   -v clapshot-demo:/mnt/clapshot-data/data \
   elonen/clapshot:latest-demo-htadmin
 ```
@@ -58,8 +58,8 @@ services:
     image: elonen/clapshot:latest-demo-htadmin
     container_name: clapshot_prod
     environment:
-      - CLAPSHOT_URL_BASE=https://clapshot.yourdomain.com/
-      - CLAPSHOT_CORS=https://clapshot.yourdomain.com
+      - CLAPSHOT_SERVER__URL_BASE=https://clapshot.yourdomain.com/
+      - CLAPSHOT_SERVER__CORS=https://clapshot.yourdomain.com
     ports:
       - "8080:80"
     volumes:
@@ -82,8 +82,8 @@ chmod +x run-cloudflare.sh
 ```bash
 # Clapshot runs on internal port, proxy handles HTTPS
 docker run -d \
-  -e CLAPSHOT_URL_BASE="https://clapshot.company.com/" \
-  -e CLAPSHOT_CORS="https://clapshot.company.com" \
+  -e CLAPSHOT_SERVER__URL_BASE="https://clapshot.company.com/" \
+  -e CLAPSHOT_SERVER__CORS="https://clapshot.company.com" \
   -p 127.0.0.1:8080:80 -p 127.0.0.1:8095:8095 \
   -v clapshot-data:/mnt/clapshot-data/data \
   elonen/clapshot:latest-demo-htadmin
@@ -116,12 +116,16 @@ sudo systemctl restart clapshot-server
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `CLAPSHOT_URL_BASE` | Full URL where users access Clapshot | `https://clapshot.company.com/` |
-| `CLAPSHOT_CORS` | CORS allowed origins | `https://clapshot.company.com` |
+| `CLAPSHOT_SERVER__URL_BASE` | Full URL where users access Clapshot | `https://clapshot.company.com/` |
+| `CLAPSHOT_SERVER__CORS` | CORS allowed origins | `https://clapshot.company.com` |
+| `CLAPSHOT_SERVER__DEBUG` | Enable verbose server logging | `true` |
+| `CLAPSHOT_SERVER__INGEST_USERNAME_FROM` | Username assignment method | `folder-name` |
 | `CLAPSHOT_APP_TITLE` | Custom application title | `"Video Review System"` |
 | `CLAPSHOT_LOGO_URL` | Custom logo URL | `"/custom-logo.svg"` |
 
-**Note:** For debug logging on Docker, add `-e debug=true` to enable verbose server logging.
+**Note:** Legacy variable names like `CLAPSHOT_URL_BASE`, `CLAPSHOT_CORS`, etc. still work for backward compatibility, but the `CLAPSHOT_SERVER__` format is recommended.
+
+**For comprehensive Docker configuration options using environment variables, see the [Docker Environment Configuration](sysadmin-guide.md#docker-environment-configuration) section in the Sysadmin Guide.**
 
 ## Quick Diagnostics
 
@@ -153,10 +157,10 @@ curl http://YOUR_IP:8080/api/health
 
 | Error | Quick Fix |
 |-------|-----------|
-| "Connecting server..." | Set `CLAPSHOT_URL_BASE` environment variable |
+| "Connecting server..." | Set `CLAPSHOT_SERVER__URL_BASE` environment variable |
 | 502 Bad Gateway | Check server logs, likely server startup failure |
 | NetworkError: Failed to fetch | Check client config and network connectivity |
-| CORS errors | Set `CLAPSHOT_CORS` to match your domain |
+| CORS errors | Set `CLAPSHOT_SERVER__CORS` to match your domain |
 
 **Browser troubleshooting:** Open DevTools Console (F12) to check for CORS/WebSocket errors like `ERR_CONNECTION_REFUSED` or 403 responses. These usually indicate network or configuration issues. See [Connection Troubleshooting Guide](connection-troubleshooting.md) for detailed help.
 

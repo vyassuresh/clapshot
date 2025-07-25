@@ -53,7 +53,7 @@ After the Docker image starts, access the web UI at `http://127.0.0.1:8080`.
 
 The multi-user demo uses [PHP htadmin](https://github.com/soster/htadmin) for user management. Default credentials are shown in the terminal.
 
-> **Note:** Chrome/Chromium works best. If accessing from a different machine, configure the `CLAPSHOT_URL_BASE` environment variable. See the [Quick Start Reference](doc/quick-start-reference.md) for common deployment scenarios.
+> **Note:** Chrome/Chromium works best. If accessing from a different machine, configure the `CLAPSHOT_SERVER__URL_BASE` environment variable (or legacy `CLAPSHOT_URL_BASE`). See the [Quick Start Reference](doc/quick-start-reference.md) for common deployment scenarios.
 
 
 ## Simple Small-business Production Deployments
