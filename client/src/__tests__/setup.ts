@@ -2,9 +2,63 @@ import { expect, afterEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/svelte'
 import '@testing-library/jest-dom'
 
-// Cleanup after each test case (e.g. clearing DOM)
+// Store active timeouts and intervals for cleanup
+const activeTimeouts = new Set<number>();
+const activeIntervals = new Set<number>();
+const activeRafs = new Set<number>();
+
+// Override setTimeout and setInterval to track active timers
+const originalSetTimeout = globalThis.setTimeout;
+const originalSetInterval = globalThis.setInterval;
+const originalClearTimeout = globalThis.clearTimeout;
+const originalClearInterval = globalThis.clearInterval;
+
+// Declare animation frame mocks early for use in cleanup
+let mockRequestAnimationFrame: ReturnType<typeof vi.fn>;
+let mockCancelAnimationFrame: ReturnType<typeof vi.fn>;
+
+globalThis.setTimeout = (...args) => {
+  const id = originalSetTimeout(...args);
+  activeTimeouts.add(id);
+  return id;
+};
+
+globalThis.setInterval = (...args) => {
+  const id = originalSetInterval(...args);
+  activeIntervals.add(id);
+  return id;
+};
+
+globalThis.clearTimeout = (id) => {
+  activeTimeouts.delete(id);
+  return originalClearTimeout(id);
+};
+
+globalThis.clearInterval = (id) => {
+  activeIntervals.delete(id);
+  return originalClearInterval(id);
+};
+
+// Cleanup after each test case (e.g. clearing DOM and all timers)
 afterEach(() => {
-  cleanup()
+  // Clear all active timeouts and intervals before DOM cleanup
+  activeTimeouts.forEach(id => {
+    try { originalClearTimeout(id); } catch (e) { /* ignore */ }
+  });
+  activeIntervals.forEach(id => {
+    try { originalClearInterval(id); } catch (e) { /* ignore */ }
+  });
+  activeRafs.forEach(id => {
+    try { mockCancelAnimationFrame(id); } catch (e) { /* ignore */ }
+  });
+  
+  // Clear the tracking sets
+  activeTimeouts.clear();
+  activeIntervals.clear();
+  activeRafs.clear();
+  
+  // Clear DOM
+  cleanup();
 })
 
 // Mock WebSocket globally
@@ -80,12 +134,37 @@ global.IntersectionObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }))
 
-// Mock animation frame functions
-global.requestAnimationFrame = vi.fn((cb) => {
-  return setTimeout(cb, 16) as any;
+// Mock animation frame functions with persistent global binding
+mockRequestAnimationFrame = vi.fn((cb) => {
+  const id = originalSetTimeout(cb, 16);
+  activeRafs.add(id);
+  return id;
 });
-global.cancelAnimationFrame = vi.fn((id) => {
-  clearTimeout(id);
+mockCancelAnimationFrame = vi.fn((id) => {
+  activeRafs.delete(id);
+  originalClearTimeout(id);
+});
+
+global.requestAnimationFrame = mockRequestAnimationFrame;
+global.cancelAnimationFrame = mockCancelAnimationFrame;
+
+// Ensure these are also available on window object for broader compatibility
+if (typeof window !== 'undefined') {
+  window.requestAnimationFrame = mockRequestAnimationFrame;
+  window.cancelAnimationFrame = mockCancelAnimationFrame;
+}
+
+// Make these functions available globally, even after potential garbage collection
+Object.defineProperty(globalThis, 'requestAnimationFrame', {
+  value: mockRequestAnimationFrame,
+  writable: true,
+  configurable: true
+});
+
+Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+  value: mockCancelAnimationFrame,
+  writable: true,
+  configurable: true
 });
 
 // Mock console methods to avoid noise in tests
