@@ -213,6 +213,18 @@ describe('FileUpload functionality', () => {
       expect(xhr.setRequestHeader).toHaveBeenCalledWith('X-CLAPSHOT-COOKIES', expect.stringContaining('session'));
     });
 
+    it('should handle Unicode filenames in headers', () => {
+      const xhr = new MockXMLHttpRequest();
+      const unicodeFile = new File(['content'], 'test_ä_ü_ß.mp4', { type: 'video/mp4' });
+      
+      // Simulate upload configuration with Unicode filename
+      xhr.open('POST', '/upload');
+      xhr.setRequestHeader('X-FILE-NAME', encodeURIComponent(unicodeFile.name));
+
+      expect(xhr.open).toHaveBeenCalledWith('POST', '/upload');
+      expect(xhr.setRequestHeader).toHaveBeenCalledWith('X-FILE-NAME', 'test_%C3%A4_%C3%BC_%C3%9F.mp4');
+    });
+
     it('should format cookies header correctly', () => {
       const cookies = {
         'session': 'test-session',

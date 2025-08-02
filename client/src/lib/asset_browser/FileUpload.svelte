@@ -78,7 +78,7 @@ function upload() {
         ajax.addEventListener("error", errorHandler, false) ;
         ajax.addEventListener("abort", abortHandler, false);
         ajax.open("POST", postUrl);
-        ajax.setRequestHeader("X-FILE-NAME", file.name);
+        ajax.setRequestHeader("X-FILE-NAME", encodeURIComponent(file.name));
 
         let upload_cookies = { ...LocalStorageCookies.getAllNonExpired() };
         if (mediaFileAddedAction)
