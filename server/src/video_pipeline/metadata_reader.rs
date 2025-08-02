@@ -65,7 +65,12 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
     let uuid = uuid::Uuid::new_v4();
     let file_dir = file.parent().ok_or("Failed to get parent directory")?;
     let temp_dir = file_dir.join(uuid.to_string());
-    let link_path = temp_dir.join(format!("tempname"));
+    
+    // Preserve original file extension to help mediainfo detect format correctly
+    let extension = file.extension()
+        .map(|ext| format!(".{}", ext.to_string_lossy()))
+        .unwrap_or_default();
+    let link_path = temp_dir.join(format!("tempname{}", extension));
 
     // (symlink wasn't reliable on Windows WSL, so we'll use hard link instead)
     tracing::debug!("Creating temp hard link from {:?} to {:?}", file, link_path);

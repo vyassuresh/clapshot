@@ -2,6 +2,7 @@ use std::{process::Command, io::BufRead, collections::HashMap};
 use std::path::PathBuf;
 use crossbeam_channel::{Sender, Receiver};
 use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 use tracing;
 use threadpool::ThreadPool;
 use std::fs;
@@ -321,6 +322,9 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
         let progress_terminate = progress_terminate.clone();
         let user_id = src.user_id.clone();
         let vid = src.media_file_id.clone();
+        
+        // Extract duration before spawning the thread to avoid lifetime issues
+        let total_duration_us = (src.duration.to_f64().unwrap_or(0.0) * 1_000_000.0) as u64;
 
         match ppipe_fname.clone() {
             None => std::thread::spawn(move || {}), // No pipe, skip progress tracking
@@ -340,6 +344,7 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
 
                     let mut msg: Option<String> = None;
                     let mut done_ratio = None;
+                    let mut current_time_us: Option<u64> = None;
 
                     while !progress_terminate.load(std::sync::atomic::Ordering::Relaxed) {
                         tracing::trace!("Reading progress from script pipe...");
@@ -369,9 +374,25 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
                                                     msg = Some("Transcoding done.".to_string());
                                                     done_ratio = Some(1.0);
                                                 },
+                                                "continue" => {
+                                                    msg = Some("Transcoding...".to_string());
+                                                    // Calculate progress percentage if we have both current time and duration
+                                                    if let Some(time_us) = current_time_us {
+                                                        if total_duration_us > 0 {
+                                                            let progress_pct = (time_us as f32 / total_duration_us as f32).min(1.0).max(0.0);
+                                                            done_ratio = Some(progress_pct);
+                                                        }
+                                                    }
+                                                },
                                                 _ => {
                                                     msg = Some("Transcoding...".to_string());
                                                 }
+                                            }
+                                        },
+                                        "out_time_us" => {
+                                            // Parse current position in microseconds
+                                            if let Ok(time_us) = val.parse::<u64>() {
+                                                current_time_us = Some(time_us);
                                             }
                                         },
                                         _ => {} // Ignore other keys

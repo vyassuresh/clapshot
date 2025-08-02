@@ -520,7 +520,110 @@ mod integration_test
             std::fs::rename(data_dir.join(audio_file_name), incoming_dir.join(audio_file_name)).unwrap();
 
             let wait_res = wait_for_reports(&mut ws, true, false, false, Some((data_dir.path().into(), audio_file_name.into()))).await;    // No thumbnail for audio
+            
+            // Check that waveform video file was created for audio transcoding
+            let videos_dir = data_dir.join("videos");
+            let mut found_video = false;
+            if let Ok(entries) = std::fs::read_dir(&videos_dir) {
+                for entry in entries.flatten() {
+                    let video_mp4 = entry.path().join("video.mp4");
+                    if video_mp4.exists() {
+                        found_video = true;
+                        break;
+                    }
+                }
+            }
+            assert!(found_video, "Audio transcoding should create waveform video file");
         }
+        Ok(())
+    }
+
+    #[test]
+    #[serial]
+    #[traced_test]
+    #[cfg(feature = "include_slow_tests")]
+    fn test_mp3_full_integration() -> anyhow::Result<()>
+    {
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner]
+            // Copy the MP3 file to incoming dir and test full integration
+            let audio_file_name = "Apollo11_countdown.mp3";
+            data_dir.copy_from("src/tests/assets/", &[audio_file_name]).unwrap();
+            std::fs::rename(data_dir.join(audio_file_name), incoming_dir.join(audio_file_name)).unwrap();
+
+            println!("DEBUG: Testing MP3 file integration: {}", audio_file_name);
+            
+            // This should work correctly with audio file processing
+            let wait_res = wait_for_reports(&mut ws, true, false, false, Some((data_dir.path().into(), audio_file_name.into()))).await;    // No thumbnail for audio
+            
+            // Check that waveform video file was created for audio transcoding
+            let videos_dir = data_dir.join("videos");
+            let mut found_video = false;
+            if let Ok(entries) = std::fs::read_dir(&videos_dir) {
+                for entry in entries.flatten() {
+                    let video_mp4 = entry.path().join("video.mp4");
+                    if video_mp4.exists() {
+                        found_video = true;
+                        break;
+                    }
+                }
+            }
+            assert!(found_video, "Audio transcoding should create waveform video file");
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[serial]
+    #[traced_test]
+    fn test_mp3_metadata_detection() -> anyhow::Result<()>
+    {
+        use crossbeam_channel;
+        use crate::video_pipeline::metadata_reader;
+        use crate::video_pipeline::IncomingFile;
+        use std::collections::HashMap;
+        
+        // Test that MP3 files are correctly detected as Audio
+        let test_file = std::path::PathBuf::from("src/tests/assets/Apollo11_countdown.mp3");
+        
+        let incoming_file = IncomingFile {
+            file_path: test_file.clone(),
+            user_id: "test_user".to_string(),
+            cookies: HashMap::new(),
+        };
+        
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded();
+        
+        // Start metadata reader
+        std::thread::spawn(move || {
+            metadata_reader::run_forever(rx, result_tx, 1);
+        });
+        
+        // Send the file for processing
+        tx.send(incoming_file).unwrap();
+        
+        // Get the result
+        match result_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+            Ok(result) => {
+                match result {
+                    metadata_reader::MetadataResult::Ok(metadata) => {
+                        // After the fix, MP3 files should be correctly detected as Audio
+                        assert_eq!(format!("{:?}", metadata.media_type), "Audio", "MP3 file should be detected as Audio");
+                        
+                        // Duration should be reasonable for the test file (~25 seconds)
+                        assert!(metadata.duration > rust_decimal::Decimal::from(20), "Duration should be > 20 seconds");
+                        assert!(metadata.duration < rust_decimal::Decimal::from(30), "Duration should be < 30 seconds");
+                    }
+                    metadata_reader::MetadataResult::Err(e) => {
+                        panic!("Metadata reading failed: {:?}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                panic!("Timeout waiting for metadata result: {:?}", e);
+            }
+        }
+        
         Ok(())
     }
 

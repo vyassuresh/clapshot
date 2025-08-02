@@ -59,21 +59,7 @@ OUTPUT_FILE="${CLAPSHOT_OUTPUT_DIR}/${CLAPSHOT_OUTPUT_PREFIX}.mp4"
 case "$CLAPSHOT_MEDIA_TYPE" in
     "video")
         # Max 1080p, stereo 128kbps audio AAC (lines 139-152 in original)
-        FFMPEG_OPTS=()
-
-        # Add hardware acceleration if configured
-        if [ -n "$HWACCEL" ]; then
-            FFMPEG_OPTS+=(-hwaccel "$HWACCEL")
-            if [ -n "$HWACCEL_DEVICE" ]; then
-                FFMPEG_OPTS+=(-hwaccel_device "$HWACCEL_DEVICE")
-            fi
-            # For QSV, also add output format
-            if [ "$HWACCEL" = "qsv" ]; then
-                FFMPEG_OPTS+=(-hwaccel_output_format qsv)
-            fi
-        fi
-
-        FFMPEG_OPTS+=(
+        FFMPEG_OPTS=(
             -map 0
             -dn
             -c:v "$VIDEO_CODEC"
@@ -91,10 +77,15 @@ case "$CLAPSHOT_MEDIA_TYPE" in
             FFMPEG_OPTS+=(-maxrate "$CLAPSHOT_TARGET_BITRATE")
             FFMPEG_OPTS+=(-bufsize $((CLAPSHOT_TARGET_BITRATE * 2)))
         fi
+
+        # Add additional VideoToolbox options if using VideoToolbox codec
+        if [[ "$VIDEO_CODEC" == *"videotoolbox"* ]]; then
+            FFMPEG_OPTS+=(-maxrate "$CLAPSHOT_TARGET_BITRATE")
+            FFMPEG_OPTS+=(-bufsize $((CLAPSHOT_TARGET_BITRATE * 2)))
+        fi
         ;;
 
     "audio")
-        # Audio visualization (lines 154-170 in original)
         # Complex filter for waveform visualization
         FILTER_COMPLEX="color=c=white:s=2x720 [cursor]; \
 [0:a] showwavespic=s=1920x720:split_channels=1:draw=scale:filter=peak:colors=#181818 [stillwave_peak];\
@@ -121,7 +112,6 @@ case "$CLAPSHOT_MEDIA_TYPE" in
         ;;
 
     "image")
-        # Still image to video (lines 172-185 in original)
         FFMPEG_OPTS=(
             -map 0
             -dn
@@ -145,8 +135,29 @@ esac
 CMD=(
     nice ffmpeg
     -nostats -hide_banner -y
-    -i "$CLAPSHOT_INPUT_FILE"
 )
+
+# Add hardware acceleration options before input file
+if [ -n "$HWACCEL" ]; then
+    CMD+=(-hwaccel "$HWACCEL")
+    if [ -n "$HWACCEL_DEVICE" ]; then
+        CMD+=(-hwaccel_device "$HWACCEL_DEVICE")
+    fi
+    # For QSV, also add output format
+    if [ "$HWACCEL" = "qsv" ]; then
+        CMD+=(-hwaccel_output_format qsv)
+    fi
+    # For VideoToolbox, also add output format
+    if [ "$HWACCEL" = "videotoolbox" ]; then
+        CMD+=(-hwaccel_output_format videotoolbox_vld)
+    fi
+    # For NVENC, use CUDA acceleration
+    if [ "$HWACCEL" = "nvenc" ]; then
+        CMD[${#CMD[@]}-1]="cuda"  # Replace 'nvenc' with 'cuda' for ffmpeg
+    fi
+fi
+
+CMD+=(-i "$CLAPSHOT_INPUT_FILE")
 
 # Add progress reporting if pipe is available
 if [ -n "${CLAPSHOT_PROGRESS_PIPE:-}" ]; then
