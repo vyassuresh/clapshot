@@ -34,8 +34,15 @@ assets = [
 
     ["debian/additional_files/clapshot-server.conf", "etc/", "644"],
     ["debian/additional_files/run-with-conf.sh", "usr/share/clapshot-server/", "755"],
+    
+    # Transcoding and thumbnailing scripts
+    ["scripts/clapshot-transcode", "usr/share/clapshot-server/scripts/", "755"],
+    ["scripts/clapshot-thumbnail", "usr/share/clapshot-server/scripts/", "755"],
+    
+    # Configuration files
+    ["debian/additional_files/clapshot-transcode.conf", "etc/", "644"],
 ]
-conf-files = ["/etc/clapshot-server.conf"]
+conf-files = ["/etc/clapshot-server.conf", "/etc/clapshot-transcode.conf"]
 maintainer-scripts = "debian/"
 systemd-units = { enable = false }
 

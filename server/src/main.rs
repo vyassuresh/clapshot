@@ -112,6 +112,14 @@ struct Args {
     /// Default is to use a Unix socket in datadir. E.g. `[::1]:50052`
     #[arg(long, value_name="BIND")]
     org_out_tcp: Option<String>,
+
+    /// Path to custom transcoding script
+    #[arg(long, value_name="SCRIPT", default_value="scripts/clapshot-transcode")]
+    transcode_script: String,
+
+    /// Path to custom thumbnailing script
+    #[arg(long, value_name="SCRIPT", default_value="scripts/clapshot-thumbnail")]
+    thumbnail_script: String,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -177,6 +185,8 @@ fn main() -> anyhow::Result<()> {
         args.poll,
         args.poll * 5.0,
         ingest_username_from,
+        args.transcode_script,
+        args.thumbnail_script,
     ) {
         error!("run_clapshot() failed: {}", e);
     }

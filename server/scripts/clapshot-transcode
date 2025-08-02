@@ -1,0 +1,163 @@
+#!/bin/bash
+#
+# Clapshot Server default transcoding script
+#
+# Environment Variables (set by Clapshot Server):
+#   CLAPSHOT_INPUT_FILE      - Path to sanitized input file (orig.ext format)
+#   CLAPSHOT_OUTPUT_DIR      - Directory where output should be created
+#   CLAPSHOT_OUTPUT_PREFIX   - Filename prefix (script decides extension)
+#   CLAPSHOT_MEDIA_TYPE      - "video", "audio", or "image"
+#   CLAPSHOT_TARGET_BITRATE  - Target bitrate in bits per second
+#   CLAPSHOT_USER_ID         - User ID for logging
+#   CLAPSHOT_MEDIA_ID        - Media file ID for logging
+#   CLAPSHOT_DURATION        - Duration in seconds (decimal)
+#   CLAPSHOT_PROGRESS_PIPE   - Named pipe for progress reporting (optional)
+#
+# Progress Reporting:
+#   Write ffmpeg-style progress to $CLAPSHOT_PROGRESS_PIPE:
+#     frame=584
+#     fps=52.40
+#     speed=2.1x
+#     progress=continue
+#   And finally:
+#     progress=end
+#
+
+set -euo pipefail
+
+# Validate required environment variables
+: "${CLAPSHOT_INPUT_FILE:?Missing input file}"
+: "${CLAPSHOT_OUTPUT_DIR:?Missing output directory}"
+: "${CLAPSHOT_OUTPUT_PREFIX:?Missing output prefix}"
+: "${CLAPSHOT_MEDIA_TYPE:?Missing media type}"
+: "${CLAPSHOT_TARGET_BITRATE:?Missing target bitrate}"
+: "${CLAPSHOT_USER_ID:?Missing user ID}"
+: "${CLAPSHOT_MEDIA_ID:?Missing media ID}"
+: "${CLAPSHOT_DURATION:?Missing duration}"
+
+# Default configuration values (can be overridden)
+VIDEO_CODEC="${VIDEO_CODEC:-libx264}"
+VIDEO_PRESET="${VIDEO_PRESET:-faster}"
+AUDIO_CODEC="${AUDIO_CODEC:-aac}"
+AUDIO_BITRATE="${AUDIO_BITRATE:-128000}"
+AUDIO_BITRATE_AUDIO="${AUDIO_BITRATE_AUDIO:-384k}"
+
+# Hardware acceleration options (empty by default)
+HWACCEL="${HWACCEL:-}"
+HWACCEL_DEVICE="${HWACCEL_DEVICE:-}"
+VIDEO_FILTER_SCALE="${VIDEO_FILTER_SCALE:-scale}"
+
+# Source optional configuration file
+if [ -f /etc/clapshot-transcode.conf ]; then
+    source /etc/clapshot-transcode.conf
+fi
+
+# Set output file (always MP4 for compatibility)
+OUTPUT_FILE="${CLAPSHOT_OUTPUT_DIR}/${CLAPSHOT_OUTPUT_PREFIX}.mp4"
+
+# Build ffmpeg command based on media type (extracted from ffmpeg_processor.rs)
+case "$CLAPSHOT_MEDIA_TYPE" in
+    "video")
+        # Max 1080p, stereo 128kbps audio AAC (lines 139-152 in original)
+        FFMPEG_OPTS=()
+
+        # Add hardware acceleration if configured
+        if [ -n "$HWACCEL" ]; then
+            FFMPEG_OPTS+=(-hwaccel "$HWACCEL")
+            if [ -n "$HWACCEL_DEVICE" ]; then
+                FFMPEG_OPTS+=(-hwaccel_device "$HWACCEL_DEVICE")
+            fi
+            # For QSV, also add output format
+            if [ "$HWACCEL" = "qsv" ]; then
+                FFMPEG_OPTS+=(-hwaccel_output_format qsv)
+            fi
+        fi
+
+        FFMPEG_OPTS+=(
+            -map 0
+            -dn
+            -c:v "$VIDEO_CODEC"
+            -vf "${VIDEO_FILTER_SCALE}=1920:-8"
+            -preset "$VIDEO_PRESET"
+            -c:a "$AUDIO_CODEC"
+            -ac 2
+            -strict experimental
+            -b:v "$CLAPSHOT_TARGET_BITRATE"
+            -b:a "$AUDIO_BITRATE"
+        )
+
+        # Add additional QSV options if using QSV codec
+        if [[ "$VIDEO_CODEC" == *"qsv"* ]]; then
+            FFMPEG_OPTS+=(-maxrate "$CLAPSHOT_TARGET_BITRATE")
+            FFMPEG_OPTS+=(-bufsize $((CLAPSHOT_TARGET_BITRATE * 2)))
+        fi
+        ;;
+
+    "audio")
+        # Audio visualization (lines 154-170 in original)
+        # Complex filter for waveform visualization
+        FILTER_COMPLEX="color=c=white:s=2x720 [cursor]; \
+[0:a] showwavespic=s=1920x720:split_channels=1:draw=scale:filter=peak:colors=#181818 [stillwave_peak];\
+[0:a] showwavespic=s=1920x720:split_channels=1:draw=scale:filter=average [stillwave_avg];\
+[stillwave_peak][stillwave_avg] overlay [stillwave];\
+\
+[stillwave] loop=loop=-1:size=1:start=0, fps=30, trim=duration=${CLAPSHOT_DURATION} [stillwave_loop]; \
+[stillwave_loop][cursor] overlay=(W*t)/(${CLAPSHOT_DURATION}):0:shortest=1 [progress]; \
+\
+[progress] format=yuv420p [out]"
+
+        FFMPEG_OPTS=(
+            -dn
+            -r 60
+            -filter_complex "$FILTER_COMPLEX"
+            -map "[out]"
+            -map "0:a"
+            -strict experimental
+            -c:v "$VIDEO_CODEC"
+            -b:v "$CLAPSHOT_TARGET_BITRATE"
+            -c:a "$AUDIO_CODEC"
+            -b:a "$AUDIO_BITRATE_AUDIO"
+        )
+        ;;
+
+    "image")
+        # Still image to video (lines 172-185 in original)
+        FFMPEG_OPTS=(
+            -map 0
+            -dn
+            -c:v "$VIDEO_CODEC"
+            -tune stillimage
+            -vf "scale=1920:-8,loop=-1:1"
+            -t 1
+            -r 24
+            -pix_fmt yuv422p
+            -b:v "$CLAPSHOT_TARGET_BITRATE"
+        )
+        ;;
+
+    *)
+        echo "ERROR: Unknown media type: $CLAPSHOT_MEDIA_TYPE" >&2
+        exit 1
+        ;;
+esac
+
+# Build complete ffmpeg command
+CMD=(
+    nice ffmpeg
+    -nostats -hide_banner -y
+    -i "$CLAPSHOT_INPUT_FILE"
+)
+
+# Add progress reporting if pipe is available
+if [ -n "${CLAPSHOT_PROGRESS_PIPE:-}" ]; then
+    CMD+=(-progress "$CLAPSHOT_PROGRESS_PIPE")
+fi
+
+# Add media-specific options and output file
+CMD+=("${FFMPEG_OPTS[@]}" "$OUTPUT_FILE")
+
+# Log the command for debugging
+echo "Executing: ${CMD[*]}" >&2
+
+# Execute ffmpeg
+exec "${CMD[@]}"

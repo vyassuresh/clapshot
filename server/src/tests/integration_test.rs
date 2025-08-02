@@ -130,7 +130,7 @@ mod integration_test
                     let org_uri = org_uri.clone();
                     let tf = terminate_flag.clone();
                     thread::spawn(move || {
-                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, tf)?;
+                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), tf)?;
                         clapshot.wait_for_termination()
                 })};
 
@@ -670,7 +670,7 @@ mod integration_test
 
                 // Call gRPC run_test() for each test name. Store results in test_results.
                 let mut test_names: Vec<String> = test_names.lock().unwrap().iter().map(|s| s.clone()).collect();
-                
+
                 // Check for TEST_ORG_FILTER environment variable to filter tests
                 if let Some(filter) = std::env::var("TEST_ORG_FILTER").ok().filter(|s| !s.is_empty()) {
                     write_log(&log, format!("    Filtering tests with pattern: '{}'", filter).as_str());
@@ -680,7 +680,7 @@ mod integration_test
                         panic!("No organizer tests match the filter '{}'", filter);
                     }
                 }
-                
+
                 write_log(&log, format!("    Running {} organizer tests", test_names.len()).as_str());
 
                 for (i, test_name) in test_names.iter().enumerate()
@@ -818,7 +818,7 @@ mod integration_test
     fn test_ingest_username_from_folder_name_nested() -> anyhow::Result<()>
     {
         cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None, None, IngestUsernameFrom::FolderName, Some("test_nested_user".to_string())]
-            // Create folder structure with specific test username  
+            // Create folder structure with specific test username
             let current_user = whoami::username();
             let username = "test_nested_user".to_string(); // Different from file owner - proves folder extraction works
             let user_dir = incoming_dir.join(&username);

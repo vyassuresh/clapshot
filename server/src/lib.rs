@@ -43,6 +43,8 @@ impl ClapshotInit {
         default_user: String,
         resubmit_delay: f32,
         ingest_username_from: video_pipeline::IngestUsernameFrom,
+        transcode_script: String,
+        thumbnail_script: String,
         terminate_flag: Arc<AtomicBool>)
         -> anyhow::Result<Self>
     {
@@ -115,10 +117,12 @@ impl ClapshotInit {
         // Run media file processing pipeline
         let tf = Arc::clone(&terminate_flag);
         let dd = data_dir.clone();
+        let ts = transcode_script.clone();
+        let ths = thumbnail_script.clone();
         let vpp_thread = Some({
             let db = db.clone();
             thread::spawn(move || { video_pipeline::run_forever(
-                db, tf.clone(), dd, user_msg_tx, poll_interval, resubmit_delay, target_bitrate, upload_rx, n_workers, ingest_username_from)})
+                db, tf.clone(), dd, user_msg_tx, poll_interval, resubmit_delay, target_bitrate, upload_rx, n_workers, ingest_username_from, ts, ths)})
         });
 
 
@@ -354,6 +358,8 @@ pub fn run_clapshot(
     poll_interval: f32,
     resubmit_delay: f32,
     ingest_username_from: video_pipeline::IngestUsernameFrom,
+    transcode_script: String,
+    thumbnail_script: String,
 ) -> anyhow::Result<()> {
 
     let terminate_flag = Arc::new(AtomicBool::new(false));
@@ -374,6 +380,8 @@ pub fn run_clapshot(
         default_user,
         resubmit_delay,
         ingest_username_from,
+        transcode_script,
+        thumbnail_script,
         terminate_flag.clone()
     )?;
 

@@ -26,7 +26,7 @@ pub mod incoming_monitor;
 pub mod metadata_reader;
 
 mod cleanup_rejected;
-mod ffmpeg_processor;
+mod script_processor;
 
 use metadata_reader::MetadataResult;
 use crate::api_server::{UserMessage, UserMessageTopic};
@@ -43,7 +43,7 @@ pub enum IngestUsernameFrom {
 
 impl std::str::FromStr for IngestUsernameFrom {
     type Err = String;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "file-owner" => Ok(IngestUsernameFrom::FileOwner),
@@ -120,7 +120,7 @@ fn ingest_media_file(
         target_bitrate: u32,
         db: &DB,
         user_msg_tx: &crossbeam_channel::Sender<UserMessage>,
-        cmpr_tx: &crossbeam_channel::Sender<ffmpeg_processor::CmprInput>)
+        cmpr_tx: &crossbeam_channel::Sender<script_processor::CmprInput>)
             -> anyhow::Result<bool>
 {
     let _span = tracing::info_span!("INGEST_MEDIA",
@@ -230,7 +230,7 @@ fn ingest_media_file(
         }
     }
 
-    let src = ffmpeg_processor::CmprInputSource {
+    let src = script_processor::CmprInputSource {
         user_id: md.user_id.clone(),
         media_file_id: media_id.to_string(),
         media_type: md.media_type.clone(),
@@ -240,9 +240,10 @@ fn ingest_media_file(
 
     let transcode_req = match needs_transcoding(md, target_bitrate) {
         Some((reason, new_bitrate)) => {
-            let video_dst = dir_for_media_file.join(format!("transcoded_br{}_{}.mp4", new_bitrate, uuid::Uuid::new_v4()));
-            cmpr_tx.send(ffmpeg_processor::CmprInput::Transcode {
-                video_dst,
+            let video_dst_prefix = format!("transcoded_br{}_{}", new_bitrate, uuid::Uuid::new_v4());
+            cmpr_tx.send(script_processor::CmprInput::Transcode {
+                video_dst_dir: dir_for_media_file.clone(),
+                video_dst_prefix,
                 video_bitrate: new_bitrate,
                 src: src.clone()
             }).map(|_| (true, reason)).context("Error sending file to transcoding")
@@ -256,11 +257,11 @@ fn ingest_media_file(
     // Also invoke thumbnail generator unless there was a problem with the file
     if let Ok(_) = &transcode_req {
         let thumb_dir = dir_for_media_file.join("thumbs");
-        if let Err(e) = cmpr_tx.send(ffmpeg_processor::CmprInput::Thumbs {
+        if let Err(e) = cmpr_tx.send(script_processor::CmprInput::Thumbs {
             thumb_dir,
             thumb_sheet_dims: (THUMB_SHEET_COLS, THUMB_SHEET_ROWS),
             thumb_size: (THUMB_W, THUMB_H),
-            src: ffmpeg_processor::CmprInputSource {
+            src: script_processor::CmprInputSource {
                 user_id: md.user_id.clone(),
                 media_file_id: media_id.to_string(),
                 media_type: md.media_type.clone(),
@@ -336,7 +337,9 @@ pub fn run_forever(
     target_bitrate: u32,
     upload_rx: Receiver<IncomingFile>,
     n_workers: usize,
-    ingest_username_from: IngestUsernameFrom)
+    ingest_username_from: IngestUsernameFrom,
+    transcode_script: String,
+    thumbnail_script: String)
 {
     tracing::debug!("Starting media file processing pipeline.");
 
@@ -378,15 +381,17 @@ pub fn run_forever(
     };
 
     // Thread for the compressor
-    let (cmpr_in_tx, cmpr_in_rx) = unbounded::<ffmpeg_processor::CmprInput>();
-    let (cmpr_out_tx, cmpr_out_rx) = unbounded::<ffmpeg_processor::CmprOutput>();
+    let (cmpr_in_tx, cmpr_in_rx) = unbounded::<script_processor::CmprInput>();
+    let (cmpr_out_tx, cmpr_out_rx) = unbounded::<script_processor::CmprOutput>();
     let (cmpr_prog_tx, cmpr_prog_rx) = unbounded::<(String, String, String, Option<f32>)>();
+    let transcode_script_clone = transcode_script.clone();
+    let thumbnail_script_clone = thumbnail_script.clone();
     thread::spawn(move || {
-        ffmpeg_processor::run_forever(cmpr_in_rx, cmpr_out_tx, cmpr_prog_tx, n_workers);
+        script_processor::run_forever(cmpr_in_rx, cmpr_out_tx, cmpr_prog_tx, n_workers, transcode_script_clone, thumbnail_script_clone);
     });
 
     // Migration from older version: find a media file that is missing thumbnail sheet
-    fn legacy_thumbnail_next_media_file(db: &DB, videos_dir: &PathBuf, cmpr_in: &mut crossbeam_channel::Sender<ffmpeg_processor::CmprInput>) -> Option<String> {
+    fn legacy_thumbnail_next_media_file(db: &DB, videos_dir: &PathBuf, cmpr_in: &mut crossbeam_channel::Sender<script_processor::CmprInput>) -> Option<String> {
 
         let candidates = db.conn()
             .and_then(|mut conn| models::MediaFile::get_all_with_missing_thumbnails(&mut conn))
@@ -411,11 +416,11 @@ pub fn run_forever(
                     let media_type = v.media_type.as_ref().map(|mt| MediaType::from_str(mt)).transpose().ok().flatten()
                         .or_else(|| { tracing::error!(media_file_id=%v.id, "Legacy thumbnailing failed. Media type missing or unkwnown: {:?}", v.media_type); None })?;
 
-                    let req = ffmpeg_processor::CmprInput::Thumbs {
+                    let req = script_processor::CmprInput::Thumbs {
                         thumb_dir: videos_dir.join(&v.id).join("thumbs"),
                         thumb_sheet_dims: (THUMB_SHEET_COLS, THUMB_SHEET_ROWS),
                         thumb_size: (THUMB_W, THUMB_H),
-                        src: ffmpeg_processor::CmprInputSource {
+                        src: script_processor::CmprInputSource {
                             user_id: v.user_id.clone(),
                             media_file_id: v.id.clone(),
                             media_type,
@@ -550,7 +555,7 @@ pub fn run_forever(
             },
             // Transcoder output
             recv(cmpr_out_rx) -> msg => {
-                use ffmpeg_processor::CmprOutput::{TranscodeSuccess, ThumbsSuccess, TranscodeFailure, ThumbsFailure};
+                use script_processor::CmprOutput::{TranscodeSuccess, ThumbsSuccess, TranscodeFailure, ThumbsFailure};
                 match msg {
                     Err(e) => { tracing::warn!("Transcoder is dead ('{:?}'). Exit.", e); break; },
                     Ok(res) => match &res {
@@ -691,7 +696,7 @@ pub fn run_forever(
                             let op = if matches!(&res, TranscodeFailure {..}) { "transcoding" } else { "thumbnailing" };
                             let msg = format!("Media {op} failed");
                             let logs = logs.clone();
-                            tracing::error!(video=logs.media_file_id, details=?logs.dmsg, msg);
+                            tracing::error!(video=logs.media_file_id, details=?logs.dmsg, stdout=%logs.stdout, stderr=%logs.stderr, msg);
                             user_msg_tx.send(UserMessage {
                                     topic: UserMessageTopic::Error,
                                     msg: msg,

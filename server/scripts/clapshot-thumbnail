@@ -1,0 +1,159 @@
+#!/bin/bash
+#
+# Clapshot Default Thumbnailing Script
+# 
+# This script replicates the exact logic from the original ffmpeg_processor.rs
+# for thumbnail generation. It creates both single "poster" thumbnails and
+# thumbnail sheets for video navigation.
+#
+# Environment Variables (set by Clapshot Server):
+#   CLAPSHOT_INPUT_FILE      - Path to sanitized input file
+#   CLAPSHOT_OUTPUT_DIR      - Directory where thumbnails should be created
+#   CLAPSHOT_MEDIA_TYPE      - "video", "audio", or "image"
+#   CLAPSHOT_USER_ID         - User ID for logging
+#   CLAPSHOT_MEDIA_ID        - Media file ID for logging
+#   CLAPSHOT_THUMB_SIZE      - Thumbnail dimensions (WxH)
+#   CLAPSHOT_SHEET_DIMS      - Sheet dimensions (ColsxRows)
+#
+
+set -euo pipefail
+
+# Validate required environment variables
+: "${CLAPSHOT_INPUT_FILE:?Missing input file}"
+: "${CLAPSHOT_OUTPUT_DIR:?Missing output directory}"
+: "${CLAPSHOT_MEDIA_TYPE:?Missing media type}"
+: "${CLAPSHOT_USER_ID:?Missing user ID}"
+: "${CLAPSHOT_MEDIA_ID:?Missing media ID}"
+: "${CLAPSHOT_THUMB_SIZE:?Missing thumbnail size}"
+: "${CLAPSHOT_SHEET_DIMS:?Missing sheet dimensions}"
+
+# Parse dimensions
+IFS='x' read -r THUMB_W THUMB_H <<< "$CLAPSHOT_THUMB_SIZE"
+IFS='x' read -r SHEET_COLS SHEET_ROWS <<< "$CLAPSHOT_SHEET_DIMS"
+
+# Create output directory
+mkdir -p "$CLAPSHOT_OUTPUT_DIR"
+
+# Determine what thumbnails to create based on media type
+case "$CLAPSHOT_MEDIA_TYPE" in
+    "video")
+        NEEDS_POSTER=true
+        NEEDS_SHEET=true
+        ;;
+    "image")
+        NEEDS_POSTER=true
+        NEEDS_SHEET=false
+        ;;
+    "audio")
+        NEEDS_POSTER=false
+        NEEDS_SHEET=false
+        ;;
+    *)
+        echo "ERROR: Unknown media type: $CLAPSHOT_MEDIA_TYPE" >&2
+        exit 1
+        ;;
+esac
+
+echo "Creating thumbnails for $CLAPSHOT_MEDIA_TYPE: poster=$NEEDS_POSTER, sheet=$NEEDS_SHEET" >&2
+
+# Create poster thumbnail (single frame, usually first)
+create_poster_thumbnail() {
+    if [ "$NEEDS_POSTER" = "false" ]; then
+        echo "Skipping poster thumbnail: not needed for this media type" >&2
+        return 0
+    fi
+    
+    local img_reshape="scale=${THUMB_W}:${THUMB_H}:force_original_aspect_ratio=decrease,pad=${THUMB_W}:${THUMB_H}:(ow-iw)/2:(oh-ih)/2"
+    
+    echo "Creating poster thumbnail (${THUMB_W}x${THUMB_H})" >&2
+    
+    nice -n 10 ffmpeg -y -i "$CLAPSHOT_INPUT_FILE" \
+        -nostats \
+        -c:v libwebp \
+        -vf "thumbnail,$img_reshape" \
+        -frames:v 1 \
+        -strict experimental \
+        "$CLAPSHOT_OUTPUT_DIR/thumb.webp"
+}
+
+# Count total frames in video (for sheet generation)
+count_video_frames() {
+    ffprobe -v error -select_streams v:0 -count_packets \
+        -show_entries stream=nb_read_packets \
+        -of csv=p=0 "$CLAPSHOT_INPUT_FILE" 2>/dev/null || echo "0"
+}
+
+# Create thumbnail sheet (grid of frames from throughout the video)
+create_thumbnail_sheet() {
+    if [ "$NEEDS_SHEET" = "false" ]; then
+        echo "Skipping thumbnail sheet: not needed for this media type" >&2
+        return 0
+    fi
+    
+    local total_frames
+    total_frames=$(count_video_frames)
+    
+    if [ "$total_frames" -eq 0 ]; then
+        echo "ERROR: Could not determine frame count for thumbnail sheet" >&2
+        return 1
+    fi
+    
+    local thumb_count=$((SHEET_COLS * SHEET_ROWS))
+    local img_reshape="scale=${THUMB_W}:${THUMB_H}:force_original_aspect_ratio=decrease,pad=${THUMB_W}:${THUMB_H}:(ow-iw)/2:(oh-ih)/2"
+    
+    # Generate frame selection filter (evenly distributed frames)
+    local frame_select_filter=""
+    for ((pos=0; pos<thumb_count; pos++)); do
+        local frame=$((pos * total_frames / thumb_count))
+        if [ $pos -eq 0 ]; then
+            frame_select_filter="eq(n\\,$frame)"
+        else
+            frame_select_filter="${frame_select_filter}+eq(n\\,$frame)"
+        fi
+    done
+    
+    echo "Creating thumbnail sheet (${SHEET_COLS}x${SHEET_ROWS}, $thumb_count frames from $total_frames total)" >&2
+    
+    nice -n 10 ffmpeg -y -i "$CLAPSHOT_INPUT_FILE" \
+        -nostats \
+        -vf "select=$frame_select_filter,$img_reshape,tile=${SHEET_COLS}x${SHEET_ROWS}" \
+        -c:v libwebp \
+        -vsync vfr \
+        -start_number 0 \
+        -strict experimental \
+        "$CLAPSHOT_OUTPUT_DIR/sheet-${SHEET_COLS}x${SHEET_ROWS}.webp"
+}
+
+# Create thumbnails in parallel
+if [ "$NEEDS_POSTER" = "true" ] && [ "$NEEDS_SHEET" = "true" ]; then
+    # Both needed - run in parallel
+    create_poster_thumbnail &
+    poster_pid=$!
+    
+    create_thumbnail_sheet &
+    sheet_pid=$!
+    
+    # Wait for both to complete
+    wait $poster_pid
+    poster_result=$?
+    
+    wait $sheet_pid  
+    sheet_result=$?
+    
+    if [ $poster_result -ne 0 ]; then
+        echo "ERROR: Poster thumbnail creation failed" >&2
+        exit $poster_result
+    fi
+    
+    if [ $sheet_result -ne 0 ]; then
+        echo "ERROR: Thumbnail sheet creation failed" >&2
+        exit $sheet_result
+    fi
+    
+elif [ "$NEEDS_POSTER" = "true" ]; then
+    create_poster_thumbnail
+elif [ "$NEEDS_SHEET" = "true" ]; then
+    create_thumbnail_sheet
+fi
+
+echo "Thumbnail processing complete" >&2
