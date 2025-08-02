@@ -2,6 +2,7 @@
 
 > **New to Clapshot?** Start with the [Quick Start Reference](quick-start-reference.md) for common deployment scenarios.
 > **Having connection issues?** See the [Connection Troubleshooting Guide](connection-troubleshooting.md) for help with common deployment and connectivity problems.
+> **Want to customize media processing?** See the [Transcoding and Thumbnailing Guide](transcoding.md) for configuring hardware acceleration and custom workflows.
 
 ### Building
 
@@ -97,12 +98,12 @@ The incoming folder monitoring is configured via command-line options:
 
 #### Important Notes
 
-- **Username Mapping**: 
+- **Username Mapping**:
   - In `file-owner` mode: The system directly maps OS file owners to Clapshot user IDs with no translation layer
   - In `folder-name` mode: Username is extracted from the first subdirectory path, enabling (S)FTP uploads without OS-level user accounts
   - Note that for web uploads, Clapshot server trusts the reverse proxy's HTTP headers for both username and display name, so any user mappings should happen at the proxy level
 - **User Auto-Creation**: If a user doesn't exist in the database, they are automatically created when their first file is processed
-- **Directory Processing**: 
+- **Directory Processing**:
   - Both modes process files in `incoming/` and one level of subdirectories (e.g., `incoming/username/file.mp4`)
   - This allows for atomic moves from staging directories (e.g., `incoming/username/incomplete/` → `incoming/username/`) to avoid processing incomplete uploads
   - In `folder-name` mode: Username is extracted from the first directory level in the path

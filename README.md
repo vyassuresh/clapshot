@@ -106,6 +106,8 @@ See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on:
 
 See [Upgrading Guide](doc/upgrading.md) for instructions on installing a new release over an old one.
 
+**Want to customize media processing?** See the [Transcoding and Thumbnailing Guide](doc/transcoding.md) for configuring hardware acceleration, custom encoders, and specialized processing workflows.
+
 
 ## Architecture Overview
 
