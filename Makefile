@@ -21,15 +21,15 @@ clean-debian:
 
 debian-docker:
 	for plat in arm64 amd64; do \
-		cd server; TARGET_ARCH=$$plat  make debian-docker; cd ..; \
-		cd organizer; TARGET_ARCH=$$plat  make debian-docker; cd ..; \
+		cd server; TARGET_ARCH=$$plat make debian-docker; cd ..; \
+		cd organizer; TARGET_ARCH=$$plat make debian-docker; cd ..; \
 	done
-	(cd client; make debian-docker)
+	cd client && make debian-docker
 	mkdir -p dist_deb
 	cp client/dist_deb/* dist_deb/
 	cp server/dist_deb/* dist_deb/
 	cp organizer/basic_folders/dist_deb/* dist_deb/
-	rm dist_deb/*dbgsym*
+	rm dist_deb/*dbgsym* dist_deb/built.*.* 2>/dev/null || true
 	ls -l dist_deb/
 
 clean:	clean-debian
@@ -104,5 +104,5 @@ build-docker-dev-and-push-hub: debian-docker
 	
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t elonen/clapshot:git-${GIT_COMMIT}-demo \
-		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htadmin \
+		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htadmin \
 		--push .

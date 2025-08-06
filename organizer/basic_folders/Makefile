@@ -19,7 +19,7 @@ PIP := $(VENV)/bin/pip
 DEPS_SRC := $(wildcard ../../protobuf/proto/*.proto) $(wildcard ../../protobuf/libs/python/src/**/*.py)
 PY_SRC := $(wildcard *.py) $(wildcard organizer/**/*.py) $(DEPS_SRC)
 
-DEB_SRC := debian/* README* LICENSE*
+DEB_SRC := debian/* README* LICENSE* requirements.txt setup.py pyproject.toml
 
 DOCKER_IMG_NAME := clapshot_org_basic_folders_${ARCH}
 DEV_VERSION := $(shell git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev")
@@ -83,7 +83,16 @@ dist_deb/built.${ARCH}.target: ${DEB_SRC} deps/$(PROTOLIB)
 
 debian-local: dist_deb/built.${ARCH}.target
 
-debian-docker: ${PY_SRC} ${DEB_SRC} docker
+debian-docker: dist_deb/built.${ARCH}.docker
+
+dist_deb/built.${ARCH}.docker: ${PY_SRC} ${DEB_SRC} ../../Dockerfile.org-python
+	@echo "-------------------------------------------------------------------------------"
+	@echo "NOTE! Creating current user and UID/GID in Docker so bind mount is owned by it."
+	@echo "Otherwise you wouldn't be able to access it without root privileges."
+	@echo "-------------------------------------------------------------------------------"
 	@mkdir -p dist_deb
+	cd ../.. && DOCKER_BUILDKIT=1 docker build $(PLATFORM_STR) -t ${DOCKER_IMG_NAME}:${DEV_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID} -f Dockerfile.org-python .
+	docker tag ${DOCKER_IMG_NAME}:${DEV_VERSION} ${DOCKER_IMG_NAME}:latest
 	$(eval CMD="cd /build/organizer/basic_folders && cp -r --preserve=mode,ownership,timestamps /deb ./dist_deb && ls -l ./dist_deb && make debian-local && cp dist_deb/*.* /deb/ && chown -R ${UID}:${GID} /deb")
 	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${DOCKER_IMG_NAME}:latest   bash -c ${CMD}
+	touch $@
