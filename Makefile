@@ -89,3 +89,20 @@ build-docker-demo-and-push-hub: debian-docker
 		-t elonen/clapshot:latest-demo-htadmin \
 		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htadmin \
 		--push .
+
+build-docker-dev: debian-docker
+	@which jq || (echo "ERROR: Please install jq first." && exit 1)
+	$(eval GIT_COMMIT=$(shell git rev-parse --short HEAD))
+	
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
+		-t elonen/clapshot:git-${GIT_COMMIT}-demo \
+		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htadmin
+
+build-docker-dev-and-push-hub: debian-docker
+	@which jq || (echo "ERROR: Please install jq first." && exit 1)
+	$(eval GIT_COMMIT=$(shell git rev-parse --short HEAD))
+	
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
+		-t elonen/clapshot:git-${GIT_COMMIT}-demo \
+		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htadmin \
+		--push .
