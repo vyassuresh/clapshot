@@ -124,8 +124,8 @@ struct Args {
 
     /// Regular expression to filter HTTP headers passed to Organizer.
     /// Only headers matching this pattern will be included in UserSessionData.
-    /// Case-insensitive matching.
-    #[arg(long, value_name="REGEX", default_value="^X[-_]REMOTE[-_]")]
+    /// Case-insensitive matching. Default is disabled for security.
+    #[arg(long, value_name="REGEX", default_value="^$")]
     org_http_headers: String,
 }
 

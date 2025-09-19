@@ -386,8 +386,9 @@ CLAPSHOT_CORS="https://clapshot.company.com"
 
 Ensure authentication headers are properly forwarded:
 - `X-Remote-User-Id`
-- `X-Remote-User-Name` 
+- `X-Remote-User-Name`
 - `X-Remote-User-Is-Admin`
+- `X-Remote-Error` (optional, for displaying authentication errors)
 
 ## Quick Reference: Common Error Messages
 

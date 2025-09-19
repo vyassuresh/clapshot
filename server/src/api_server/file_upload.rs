@@ -33,7 +33,15 @@ pub async fn handle_multipart_upload(
     body: impl warp::Stream<Item = Result<impl bytes::Buf, warp::Error>> + Unpin)
         -> Result<warp::reply::WithStatus<String>, Infallible>
 {
-    let (user_id, user_name, is_admin, cookies, filtered_headers) = parse_auth_headers(&hdrs, &server.default_user, &server.org_http_headers_regex);
+    let (user_id, user_name, is_admin, cookies, filtered_headers, remote_error) = parse_auth_headers(&hdrs, &server.default_user, &server.org_http_headers_regex);
+
+    // If X-Remote-Error is set, return error response
+    if let Some(error_msg) = remote_error {
+        return Ok(warp::reply::with_status(
+            format!("Authentication Error: {}", error_msg),
+            warp::http::StatusCode::FORBIDDEN
+        ));
+    }
 
     // Check from organizer if user is allowed to upload.
     // Allow by default if organizer is not configured or doesn't care.

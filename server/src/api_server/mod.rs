@@ -355,8 +355,8 @@ pub fn validate_org_http_headers_regex(pattern: &str) -> anyhow::Result<Regex> {
 /// * `default_user_id` - Default user ID to use if X-Remote-User-Id is missing
 /// * `filter_regex` - Regex to filter headers for organizer (case-insensitive)
 ///
-/// * Returns: (user_id: String, user_name: String, is_admin: bool, clapshot_cookies: HashMap<String, String>, filtered_headers: HashMap<String, String>)
-fn parse_auth_headers(hdrs: &HeaderMap, default_user_id: &str, filter_regex: &Regex) -> (String, String, bool, HashMap<String, String>, HashMap<String, String>)
+/// * Returns: (user_id: String, user_name: String, is_admin: bool, clapshot_cookies: HashMap<String, String>, filtered_headers: HashMap<String, String>, remote_error: Option<String>)
+fn parse_auth_headers(hdrs: &HeaderMap, default_user_id: &str, filter_regex: &Regex) -> (String, String, bool, HashMap<String, String>, HashMap<String, String>, Option<String>)
 {
     fn try_get_first_named_hdr<T>(hdrs: &HeaderMap, names: T) -> Option<String>
         where T: IntoIterator<Item=&'static str> {
@@ -383,6 +383,8 @@ fn parse_auth_headers(hdrs: &HeaderMap, default_user_id: &str, filter_regex: &Re
 
     let is_admin: bool = try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Is-Admin", "X_Remote_User_Is_Admin", "HTTP_X_REMOTE_USER_IS_ADMIN"])
         .map(|s| s.to_lowercase() == "true" || s == "1").unwrap_or(user_id == "admin");
+
+    let remote_error = try_get_first_named_hdr(&hdrs, vec!["X-Remote-Error", "X_Remote_Error", "HTTP_X_REMOTE_ERROR"]);
 
     let app_cookies = match cookies_str.parse::<serde_json::Value>() {
         Ok(c) => {
@@ -413,7 +415,7 @@ fn parse_auth_headers(hdrs: &HeaderMap, default_user_id: &str, filter_regex: &Re
         }
     }
 
-    (user_id, user_name, is_admin, app_cookies, filtered_headers)
+    (user_id, user_name, is_admin, app_cookies, filtered_headers, remote_error)
 }
 
 /// Handle HTTP requests, read authentication headers and dispatch to WebSocket handler.
@@ -495,7 +497,7 @@ async fn run_api_server_async(
         .map (move|hdrs: HeaderMap, ws: warp::ws::Ws| {
 
             // Get user ID and username (from reverse proxy)
-            let (user_id, user_name, is_admin, app_cookies, filtered_headers) = parse_auth_headers(&hdrs, &server_state.default_user, &server_state.org_http_headers_regex);
+            let (user_id, user_name, is_admin, app_cookies, filtered_headers, remote_error) = parse_auth_headers(&hdrs, &server_state.default_user, &server_state.org_http_headers_regex);
 
             // Increment session counter
             let sid = {
@@ -506,7 +508,22 @@ async fn run_api_server_async(
 
             let server_state = server_state.clone();
             let is_admin = is_admin.clone();
-            ws.on_upgrade(move |ws| async move {
+            ws.on_upgrade(move |mut ws| async move {
+                // Check for X-Remote-Error and send error message if present
+                if let Some(error_msg) = remote_error {
+                    let err_msg = proto::client::server_to_client_cmd::Error {
+                        msg: format!("Authentication Error: {}", error_msg)
+                    };
+                    let json_txt = serde_json::to_string(&err_msg).expect("Error serializing error message");
+                    if let Err(e) = ws.send(warp::ws::Message::text(json_txt)).await {
+                        tracing::error!("Failed to send error message: {}", e);
+                    }
+                    if let Err(e) = ws.close().await {
+                        tracing::error!("Failed to close socket: {}", e);
+                    }
+                    return;
+                }
+
                 // Diesel SQLite calls are blocking, so run a thread per user session
                 // even though we're using async/await
                 tokio::task::spawn_blocking(move || {

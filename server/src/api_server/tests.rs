@@ -432,7 +432,7 @@ fn test_header_filtering() {
     headers.insert("Authorization", HeaderValue::from_static("Bearer token123"));
     headers.insert("Content-Type", HeaderValue::from_static("application/json"));
 
-    let (user_id, user_name, is_admin, _cookies, filtered_headers) =
+    let (user_id, user_name, is_admin, _cookies, filtered_headers, _remote_error) =
         parse_auth_headers(&headers, "anonymous", &regex);
 
     // Verify basic auth parsing still works
@@ -460,11 +460,40 @@ fn test_header_filtering_case_insensitive() {
     headers.insert("X-Remote-User-Id", HeaderValue::from_static("testuser"));
     headers.insert("x-remote-groups", HeaderValue::from_static("users"));
 
-    let (_, _, _, _, filtered_headers) =
+    let (_, _, _, _, filtered_headers, _remote_error) =
         parse_auth_headers(&headers, "anonymous", &regex);
 
     // Both should match due to case insensitive regex (HeaderMap converts to lowercase)
     assert_eq!(filtered_headers.len(), 2);
     assert!(filtered_headers.contains_key("x-remote-user-id"));
     assert!(filtered_headers.contains_key("x-remote-groups"));
+}
+
+#[test]
+fn test_remote_error_header() {
+    let regex = validate_org_http_headers_regex("^X[-_]REMOTE[-_]USER[-_]CAN[-_]UPLOAD$").unwrap();
+
+    // Test with X-Remote-Error header
+    let mut headers = HeaderMap::new();
+    headers.insert("X-Remote-Error", HeaderValue::from_static("Access denied by IDP"));
+    headers.insert("X-Remote-User-Id", HeaderValue::from_static("testuser"));
+
+    let (user_id, _user_name, _is_admin, _cookies, filtered_headers, remote_error) =
+        parse_auth_headers(&headers, "anonymous", &regex);
+
+    // Verify error is captured
+    assert_eq!(remote_error, Some("Access denied by IDP".to_string()));
+    assert_eq!(user_id, "testuser"); // User info should still be parsed
+
+    // Verify error header is NOT passed to organizer (handled by server)
+    assert!(!filtered_headers.contains_key("x-remote-error"));
+
+    // Test without error header
+    let mut headers_no_error = HeaderMap::new();
+    headers_no_error.insert("X-Remote-User-Id", HeaderValue::from_static("testuser"));
+
+    let (_, _, _, _, _, remote_error_none) =
+        parse_auth_headers(&headers_no_error, "anonymous", &regex);
+
+    assert_eq!(remote_error_none, None);
 }
