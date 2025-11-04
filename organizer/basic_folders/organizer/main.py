@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import re
+from pathlib import Path
 
 from docopt import docopt
 import grpclib.server
@@ -9,6 +10,12 @@ from clapshot_grpc.logger import make_organizer_logger
 
 from .config import VERSION
 from . import OrganizerInbound
+
+# Ensure the organizer package is importable by metaplugins at runtime
+# This supports both installed package and development editable installs
+_organizer_parent_dir = str(Path(__file__).parent.parent)
+if _organizer_parent_dir not in sys.path:
+    sys.path.insert(0, _organizer_parent_dir)
 
 
 async def async_main():

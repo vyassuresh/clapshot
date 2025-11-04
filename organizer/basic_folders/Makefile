@@ -29,7 +29,7 @@ TARGET_BIN := $(VENV)/bin/clapshot-organizer-basic-folders
 
 
 $(TARGET_BIN): $(VENV) $(PY_SRC) $(VENV)/bin/mypy
-	$(VENV)/bin/mypy organizer
+	$(VENV)/bin/mypy organizer example_metaplugins
 	$(PIP) install --no-build-isolation .
 
 $(VENV)/bin/mypy: $(VENV)

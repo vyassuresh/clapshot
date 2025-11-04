@@ -138,6 +138,7 @@ The included "[basic_folders](organizer/basic_folders/README.md)" organizer (Pyt
 - **Folder Sharing**: Secure token-based sharing of folder contents (requires authentication)
 - **Admin Interface**: User management with batch operations and ownership transfer
 - **Access Control**: Permission boundaries and cross-user navigation for administrators
+- **Metaplugins**: Lightweight Python extension system for adding custom actions, workflows, and integrations without modifying the core organizer. See [METAPLUGINS.md](organizer/basic_folders/METAPLUGINS.md) for details.
 
 Custom organizers can integrate with existing systems (LDAP, project management databases, etc.) through custom development.
 
