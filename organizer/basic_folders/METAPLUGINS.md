@@ -20,28 +20,30 @@ See `example_metaplugins/calculate_sha256.py` for a working example that demonst
 
 To develop metaplugins with full IDE type checking and `mypy` support:
 
-1. **Clone the Basic Folders organizer repository**
+1. **Create a directory for your metaplugin**
    ```bash
-   git clone <repo-url> clapshot-organizer-basic-folders
-   cd clapshot-organizer-basic-folders
+   mkdir my-metaplugin
+   cd my-metaplugin
    ```
 
 2. **Create a Python venv and install packages in editable mode**
    ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+   python3 -m venv _venv
+   source _venv/bin/activate  # or _venv\Scripts\activate on Windows
+
+   # Install the clapshot protobuf library in editable mode
+   pip install -e /path/to/clapshot/protobuf/libs/python --config-settings editable_mode=compat
 
    # Install the organizer and its dependencies in editable mode
-   pip install -e .
-
-   # Install the clapshot protobuf library (for type definitions)
-   pip install -e /path/to/clapshot/protobuf
+   pip install -e /path/to/clapshot/organizer/basic_folders --config-settings editable_mode=compat
 
    # Optional: Install mypy for type checking
    pip install mypy
    ```
 
-3. **Now your IDE should have type support**
+   **Note**: The `--config-settings editable_mode=compat` flag ensures that mypy and IDEs can find the packages without additional configuration.
+
+3. **Now your IDE should have full type support**
    In your metaplugin, you can import and use the typed interfaces:
    ```python
    from organizer.metaplugin import OrganizerContext, FolderContext, MetaPluginInterface
