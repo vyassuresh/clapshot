@@ -164,16 +164,14 @@ impl Drop for ProcHandle {
                                     Ok(status) => debug!("Process '{}' killed with status: {}", self.name, status),
                                     Err(e) => warn!("Failed to wait for shell after SIGKILL: {:?}", e),
                                 },
-                                Err(Error::Sys(errno)) => { warn!("Failed to send SIGKILL: {}", errno); },
-                                Err(e) => warn!("An unexpected error occurred: {}", e),
+                                Err(e) => { warn!("Failed to send SIGKILL: {}", e); },
                 }}}},
-                Err(Error::Sys(errno)) => {
-                    match errno {
-                        nix::errno::Errno::EPERM => warn!("No permission to send signal to pid {}.", pid),
-                        nix::errno::Errno::ESRCH => warn!("Process does not exist"),
-                        _ => warn!("An unexpected error occurred: {}", errno),
+                Err(e) => {
+                    match e {
+                        Error::EPERM => warn!("No permission to send signal to pid {}.", pid),
+                        Error::ESRCH => warn!("Process does not exist"),
+                        _ => warn!("An unexpected error occurred: {}", e),
                 }},
-                Err(e) => warn!("An unexpected error occurred: {}", e),
             };
 
             debug!("Joining logging threads...");

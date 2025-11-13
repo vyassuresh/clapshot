@@ -15,28 +15,29 @@ path = "src/lib.rs"
 
 
 [dependencies]
-tracing = "0.1.38"
-serde = "1.0.160"
-warp = "0.3.4"
-tokio = { version = "1.38.2", features = ["full"] }
-tokio-stream = "0.1.13"
-anyhow = "1.0.70"
-tonic = "0.13.1"
-prost = "0.13.5"
-tonic-reflection = "0.13.1"
-tower = { version = "0.5.2", features = ["util"] }
-pbjson = "0.7.0"
-pbjson-types = "0.7.0"
+tracing = "0.1"
+serde = "1.0"
+warp = "0.4"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+anyhow = "1.0"
+tonic = "0.14"
+prost = "0.14"
+tonic-prost = "0.14"
+tonic-reflection = "0.14"
+tower = { version = "0.5", features = ["util"] }
+pbjson = "0.8"
+pbjson-types = "0.8"
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
-libc = "0.2.142"
-strip-ansi-escapes = "0.2.0"
-wait-timeout = "0.2.0"
-nix = "0.20.0"
-mio = { version = "0.8.11", features = ["os-ext"] }
-axum = "0.7"
-axum-core = "0.4"
+libc = "0.2"
+strip-ansi-escapes = "0.2"
+wait-timeout = "0.2"
+nix = { version = "0.30", features = ["signal", "process"] }
+mio = { version = "1.0", features = ["os-ext"] }
+axum = "0.8"
+axum-core = "0.5"
 
 [build-dependencies]
-tonic-build = "0.13.1"
-pbjson-build = "0.7.0"
+tonic-prost-build = "0.14"
+pbjson-build = "0.8"
