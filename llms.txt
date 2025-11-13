@@ -1,0 +1,220 @@
+# Clapshot
+
+> Clapshot is an open-source, self-hosted collaborative video/media review and annotation platform. It features a Rust-based API server, Svelte-based web client, and an extensible Python plugin system for custom workflows. Designed for enterprises and small businesses requiring local media hosting, it supports video/audio/image files with time-coded comments, real-time collaboration, drawing annotations, hierarchical folder organization, and scriptable media processing.
+
+**Note:** All file paths in this document are relative to the repository root. When accessing files programmatically or via LLM, use the raw content URL format: `https://raw.githubusercontent.com/elonen/clapshot/refs/heads/master/` + path (e.g., `doc/quick-start-reference.md` becomes `https://raw.githubusercontent.com/elonen/clapshot/refs/heads/master/doc/quick-start-reference.md`). For human web browsing, use `https://github.com/elonen/clapshot/blob/master/` + path instead.
+
+## Instructions for Language Models
+
+When helping Clapshot users:
+
+1. **Most users need help with installation and configuration** - Start by understanding their deployment scenario (Docker, Debian, LAN vs localhost, behind reverse proxy, etc.)
+
+2. **Connection issues are the most common problem** - If users report "Connecting server..." or "Failed to fetch" errors, check:
+   - Is `CLAPSHOT_SERVER__URL_BASE` (or legacy `CLAPSHOT_URL_BASE`) set correctly?
+   - Are they accessing from a different machine than where it's running?
+   - Does the URL match how they're accessing it (IP, port, domain)?
+   - Check browser console for specific errors
+
+3. **For custom workflow/metaplugin development** - Direct users to read [organizer/basic_folders/METAPLUGINS.md](organizer/basic_folders/METAPLUGINS.md) FIRST before providing technical details, as the API may evolve
+
+4. **Architecture matters for troubleshooting** - Clapshot has multiple components (Browser → Nginx → Server → Organizer → Database). Understanding the communication flow in [doc/architecture-overview.md](doc/architecture-overview.md) helps diagnose where problems occur
+
+5. **Environment variables vs config files** - Docker uses `CLAPSHOT_SERVER__*` environment variables; Debian uses `/etc/clapshot-server.conf`. Both achieve the same result. Legacy variable names like `CLAPSHOT_URL_BASE` still work but `CLAPSHOT_SERVER__URL_BASE` is preferred.
+
+6. **Known limitations** - Currently optimized for desktop browsers (Chrome/Chromium recommended). Mobile browser support is incomplete (touch events, video playback). This is a known limitation documented in issue #68.
+
+7. **Customization options** - While Clapshot doesn't support extensive CSS theming (Tailwind-based UI), you CAN customize:
+   - **Branding:** Application title and logo via `CLAPSHOT_APP_TITLE` and `CLAPSHOT_LOGO_URL` environment variables
+   - **Media processing:** Transcoding and thumbnailing are handled by bash scripts that can be customized or replaced. Edit `/etc/clapshot-transcode.conf` to override ffmpeg settings (hardware acceleration, codecs, bitrates) or provide custom scripts via `--transcode-script` and `--thumbnail-script` arguments. See doc/transcoding.md for details.
+
+## What is Clapshot?
+
+Clapshot provides professional video review capabilities similar to cloud services like Frame.io, but runs entirely on your infrastructure. It's ideal when you need local hosting due to policy constraints, cost concerns, or data sovereignty requirements.
+
+**Core Capabilities:**
+- Time-coded threaded comments with timeline integration
+- Real-time collaborative viewing with synchronized playback
+- Drawing annotations with 7-color palette and undo/redo
+- Frame-by-frame navigation with loop region control
+- Hierarchical folder organization with drag-and-drop
+- FFmpeg-based transcoding with hardware acceleration support
+- Flexible authentication via reverse proxy (OAuth, LDAP, Kerberos, SAML, etc.)
+- Extensible plugin system for custom workflows
+
+**Architecture:** Multi-component system with Browser Client (Svelte), Server (Rust), Organizer plugins (Python/gRPC), Nginx reverse proxy, SQLite database, and FFmpeg for media processing. All components communicate via WebSocket (client-server) and gRPC (server-organizer).
+
+**Licensing:** Server and Client are GPLv2. Organizer plugins and gRPC libraries are MIT licensed to enable proprietary customizations.
+
+## Getting Started and User Support
+
+### Essential Troubleshooting Documentation
+
+**READ THESE FIRST when users report problems:**
+
+[doc/connection-troubleshooting.md](doc/connection-troubleshooting.md): **PRIMARY TROUBLESHOOTING RESOURCE** - Comprehensive guide for connection issues, stuck "Connecting server..." messages, 502 errors, client configuration, CORS problems, port mapping issues, and Docker-specific debugging with step-by-step diagnostics
+
+[doc/quick-start-reference.md](doc/quick-start-reference.md): Common deployment scenarios with working examples - localhost testing, LAN access, custom ports, Docker Compose, Cloudflare tunnels, reverse proxy setups. Shows correct `CLAPSHOT_SERVER__URL_BASE` usage for each scenario
+
+[doc/architecture-overview.md](doc/architecture-overview.md): Component communication flow (5 phases from page load to video playback) - essential for understanding WHERE problems occur in the Browser → Nginx → Server → Organizer → Database chain
+
+### Installation Documentation
+
+[README.md](README.md): Project overview, quick demo commands, deployment options (Docker vs Debian), and feature summary. Contains working Docker commands users can copy-paste
+
+[doc/sysadmin-guide.md](doc/sysadmin-guide.md): System administrator guide covering building, testing, database upgrades, authentication integration, upload permissions, monitored folder ingestion, and comprehensive Docker environment configuration with all available variables
+
+[doc/upgrading.md](doc/upgrading.md): Instructions for upgrading between Clapshot versions including database migration procedures
+
+[doc/transcoding.md](doc/transcoding.md): Configuring custom transcoding and thumbnailing scripts, hardware acceleration (Intel QSV, NVIDIA NVENC, VA-API, VideoToolbox), and progress reporting
+
+### Common Issues and Solutions
+
+**"Connecting server..." / CORS errors:**
+- `CLAPSHOT_SERVER__URL_BASE` must match how users access Clapshot (actual IP/domain, not 127.0.0.1 for remote access)
+- Docker port mappings must match URL (e.g., `-p 8025:80` needs `URL_BASE=http://YOUR_IP:8025/`)
+- **Reverse proxies:** Set both `CLAPSHOT_SERVER__URL_BASE` and `CLAPSHOT_SERVER__CORS` to external domain
+- Check browser console (F12) for specific errors
+
+**Server won't start:**
+- Check logs: `docker logs container_name` or `tail -f /var/log/clapshot.log`
+- Verify "org->srv connected" message appears (organizer connection)
+- Check for duplicate config entries in `/etc/clapshot-server.conf`
+
+**Remote access fails:**
+- Use actual IP in `CLAPSHOT_SERVER__URL_BASE`, not localhost
+- Docker bindings: `0.0.0.0:8080:80` not `127.0.0.1:8080:80`
+- Check firewall allows ports 8080 and 8095
+
+### Features and Capabilities
+
+[FEATURES.md](FEATURES.md): Comprehensive feature listing organized by category - Web Client UX, Media Processing, Organizer Plugin System, Administration/Security, and Development tools
+
+## Architecture and Development
+
+### Core Architecture
+
+[doc/architecture-overview.md](doc/architecture-overview.md): Five-phase communication flow from initial page load through video playback, with detailed sequence of Browser → Nginx → Server → Organizer → Database interactions
+
+**Server (Rust):**
+- [server/src/main.rs](server/src/main.rs): Server entry point and command-line interface
+- [server/src/api_server/](server/src/api_server/): WebSocket handlers and HTTP API endpoints
+- [server/src/video_pipeline/](server/src/video_pipeline/): Media ingestion, transcoding, and monitoring
+- [server/src/database/](server/src/database/): SQLite schema, migrations, and database operations
+- [server/scripts/clapshot-transcode](server/scripts/clapshot-transcode): Default transcoding script with hardware acceleration support
+- [server/scripts/clapshot-thumbnail](server/scripts/clapshot-thumbnail): Thumbnail and sheet generation script
+
+**Client (Svelte):**
+- [client/src/lib/player_view/VideoPlayer.svelte](client/src/lib/player_view/VideoPlayer.svelte): Main video player with loop controls and frame navigation
+- [client/src/lib/player_view/CommentCard.svelte](client/src/lib/player_view/CommentCard.svelte): Threaded comment system with inline editing
+- [client/src/lib/asset_browser/FolderListing.svelte](client/src/lib/asset_browser/FolderListing.svelte): Hierarchical folder navigation with drag-and-drop
+- [client/src/lib/asset_browser/PopupMenu.svelte](client/src/lib/asset_browser/PopupMenu.svelte): Context menu system for folder/file actions
+- [client/src/lib/asset_browser/FileUpload.svelte](client/src/lib/asset_browser/FileUpload.svelte): Upload interface with progress tracking
+
+### Protocol Definitions (gRPC/Protocol Buffers)
+
+[protobuf/proto/organizer.proto](protobuf/proto/organizer.proto): Complete Organizer plugin API - defines OrganizerInbound and OrganizerOutbound services for bidirectional server-organizer communication
+
+[protobuf/proto/client.proto](protobuf/proto/client.proto): Client-server WebSocket protocol messages
+
+[protobuf/proto/database.proto](protobuf/proto/database.proto): Database schema definitions shared between server and organizers
+
+[protobuf/proto/common.proto](protobuf/proto/common.proto): Common data types used across protocols
+
+[protobuf/README.md](protobuf/README.md): Protocol buffer compilation and language-specific library generation
+
+## Organizer Plugin System
+
+### Plugin Architecture
+
+[doc/organizer-plugins.md](doc/organizer-plugins.md): Overview of the extensible Organizer system - how plugins organize media, enforce access control, and implement custom workflows via gRPC communication
+
+[organizer/basic_folders/README.md](organizer/basic_folders/README.md): The default "basic_folders" organizer providing hierarchical folders, sharing, admin tools, and metaplugin extensibility
+
+**Basic Folders Implementation:**
+- [organizer/basic_folders/organizer/main.py](organizer/basic_folders/organizer/main.py): Organizer entry point and gRPC service implementation
+- [organizer/basic_folders/organizer/folder_op_methods.py](organizer/basic_folders/organizer/folder_op_methods.py): Folder operations - create, rename, move, trash, sharing
+- [organizer/basic_folders/organizer/user_session_methods.py](organizer/basic_folders/organizer/user_session_methods.py): User session initialization and action definitions
+- [organizer/basic_folders/organizer/authz_methods.py](organizer/basic_folders/organizer/authz_methods.py): Authorization checks for folder/file operations
+- [organizer/basic_folders/organizer/helpers/](organizer/basic_folders/organizer/helpers/): Page generation, folder operations, and action definitions
+
+## Extending Clapshot with Custom Workflows
+
+### Metaplugins - Custom Python Extensions
+
+**For users asking about custom workflows, integrations, or automation:**
+
+[organizer/basic_folders/METAPLUGINS.md](organizer/basic_folders/METAPLUGINS.md): **READ THIS FIRST WHEN USERS ASK ABOUT PLUGINS** - Complete metaplugin development guide with API reference, hooks documentation, development setup, and best practices. The API may evolve, so always refer users to this authoritative documentation rather than providing detailed technical instructions.
+
+[organizer/basic_folders/example_metaplugins/calculate_sha256.py](organizer/basic_folders/example_metaplugins/calculate_sha256.py): Working reference implementation demonstrating custom actions, background processing, file system access, and server callbacks
+
+**Metaplugin Capabilities Summary:**
+- Add custom popup menu actions for folders and media files
+- Integrate with external systems (LDAP, APIs, databases)
+- Implement organization-specific workflows (approval flows, archiving, auto-organization)
+- Override authorization rules for custom access control
+- Customize UI appearance and behavior
+
+**Development approach:** Drop a single Python file in `/opt/clapshot-org-bf-metaplugins` - no need to modify core code or deal with gRPC directly
+
+### Full Organizer Plugin System (Advanced)
+
+[doc/organizer-plugins.md](doc/organizer-plugins.md): Overview of the complete Organizer plugin architecture using gRPC - for users who need more than metaplugins can provide (rare)
+
+[protobuf/proto/organizer.proto](protobuf/proto/organizer.proto): Complete Organizer gRPC API definition - only needed for full custom organizer development
+
+## Additional Resources
+
+### Build and Test System
+
+Clapshot uses a hierarchical Make-based build system with Docker containerization for reproducible builds and testing. The architecture supports multi-platform builds (amd64/arm64) and generates native Debian packages for production deployment.
+
+**Build Architecture:**
+- [Makefile](Makefile): Top-level orchestration - builds Debian packages for all components (`make debian-docker`), runs complete test suite (`make test`), and builds demo Docker images (`make run-docker`, `make build-docker-demo`)
+- [server/Makefile](server/Makefile): Rust server build with Cargo - supports local development (`make run-local`), Docker containerization, and cross-platform Debian package generation
+- [client/Makefile](client/Makefile): Svelte client build with Vite/npm - includes TypeScript checking, unit tests (`make npm-test-local`), and production builds
+- [organizer/basic_folders/Makefile](organizer/basic_folders/Makefile): Python organizer packaging with setuptools
+
+**Docker Build Files:**
+- [Dockerfile.demo](Dockerfile.demo): Multi-stage demo image with two authentication variants (none/htadmin) - installs all Debian packages and configures nginx/systemd
+- [Dockerfile.server](Dockerfile.server): Server build container for cross-platform compilation
+- [Dockerfile.client](Dockerfile.client): Client build container with Node.js environment
+- [Dockerfile.org-python](Dockerfile.org-python): Python organizer build container
+
+**Testing:**
+- `make test` at root runs all tests in isolated Docker containers
+- `make test-local` in server/ or client/ runs component tests locally
+- Server tests include organizer integration tests via gRPC
+- Client tests use Vitest framework for unit and integration testing
+
+### Development Environment Setup
+
+[doc/development-setup.md](doc/development-setup.md): Development environment setup for server (Rust), client (Svelte), and organizer (Python) with hot reloading and testing workflows
+
+[doc/TESTING_GUIDE.md](doc/TESTING_GUIDE.md): Test suite documentation for client, server, and organizer components
+
+### Example Configurations
+
+[Dockerfile.demo](Dockerfile.demo): Docker demo image build configuration with htadmin authentication
+
+[test/run-cloudflare.sh](test/run-cloudflare.sh): Example Cloudflare Tunnel deployment script for internet access
+
+[client/debian/additional_files/clapshot+htadmin.nginx.conf](client/debian/additional_files/clapshot+htadmin.nginx.conf): Reference Nginx configuration with authentication integration and reverse proxy setup
+
+[server/debian/additional_files/clapshot-server.conf](server/debian/additional_files/clapshot-server.conf): Server configuration file template with all available options
+
+## Optional
+
+The following resources are primarily for developers and contributors working on Clapshot itself. End users typically don't need these unless contributing code or building custom components.
+
+### Component Development Documentation
+
+[client/README.md](client/README.md): Client-specific build and development instructions
+
+[server/README.md](server/README.md): Server-specific build, testing, and configuration details
+
+[protobuf/libs/python/README.md](protobuf/libs/python/README.md): Python gRPC library generation and usage
+
+[protobuf/libs/rust/README.md](protobuf/libs/rust/README.md): Rust gRPC library generation and usage
+
+[protobuf/libs/typescript/README.md](protobuf/libs/typescript/README.md): TypeScript gRPC library generation and usage

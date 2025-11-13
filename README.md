@@ -91,7 +91,7 @@ The same process can be adapted to any other *HTTPS-Proxy-as-a-Service* besides 
 
 **New to Clapshot?** Start with the [Quick Start Reference](doc/quick-start-reference.md) for common deployment scenarios.
 
-You can also interrogate [Clapshot Config Helper GPT](https://chatgpt.com/g/g-687debd7cfec8191ad14f604552f0121-clapshot-config-helper) that has technical knowledge of the project and custom instructions to assist.
+**Need help?** Point your favorite LLM to [llms.txt](https://raw.githubusercontent.com/elonen/clapshot/refs/heads/master/llms.txt) for comprehensive configuration assistance. Most modern AI assistants (Claude, ChatGPT, Gemini, etc.) can read this file directly from the GitHub repository and help with installation, troubleshooting, and customization. Alternatively, you can try the [Clapshot Config Helper GPT](https://chatgpt.com/g/g-687debd7cfec8191ad14f604552f0121-clapshot-config-helper) (though it may have somewhat outdated documentation).
 
 See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on:
 
