@@ -239,6 +239,10 @@ To use it, the example directory is automatically mounted into the Docker contai
 export CLAPSHOT_METAPLUGINS_DIR="$(pwd)/organizer/basic_folders/example_metaplugins"
 ```
 
+## More resources
+
+You can access all gRPC calls to server from basic_folders metaplugins, too. See, in particular [protobuf/proto/organizer.proto](protobuf/proto/organizer.proto) and other proto buffer definitions in that folder. They are translated at compile time to a Python library in `protobuf/libs/python/src/clapshot_grpc/`, that the metaplugin will then call -- see the SHA256 example on how exactly.
+
 ## Error Handling
 
 - Plugin loading errors are logged but don't prevent organizer startup

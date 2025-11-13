@@ -26,6 +26,15 @@ First, open two WSL2 Debian terminals open - one for server dev (Rust), one for 
   * Open http://localhost:5173/ in browser. Vite will reflect changes to the code
     while developing the Svete app, which is very handy. The client will connect Websocket to `ws://localhost:8089/` by default, so you can see what the server is doing in the other WSL terminal.
 
+**Organizer / Metaplugins**:
+
+For developing metaplugins (custom Python extensions for the Basic Folders organizer), see the complete setup instructions in [organizer/basic_folders/METAPLUGINS.md](../organizer/basic_folders/METAPLUGINS.md). This covers:
+
+ * Creating a Python venv with proper editable installs for type checking
+ * Installing the clapshot protobuf library and organizer packages
+ * Configuring mypy and IDE support for full autocomplete
+ * Running and testing metaplugins locally
+
 When done, at top level, run one of the following:
 
  * `make test` to build both client and server, and to run all tests in a pristine Docker container
