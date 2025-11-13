@@ -1,3 +1,11 @@
+clapshot-organizer-basic-folders (0.9.0) bookworm; urgency=low
+
+  * New feature: Metaplugins support for organizer extensibility
+  * Add 'test-local' target to Makefile
+  * Bug fix: Progress percentage now properly relayed to Client
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 13 Nov 2025 18:00:00 +0200
+
 clapshot-organizer-basic-folders (0.8.7) bookworm; urgency=low
 
   * Support for X-Remote-* HTTP headers forwarding from server

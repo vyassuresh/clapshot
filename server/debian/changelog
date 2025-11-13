@@ -1,3 +1,14 @@
+clapshot-server (0.9.0) bookworm; urgency=low
+
+  * New feature: X-Remote-Error header support
+  * Security: Upgrade tracing-subscriber from 0.3.19 to 0.3.20
+  * Upgrade Rust dependencies
+  * Change org-http-headers default to non-matching regex
+  * Update Nginx configuration defaults (use $remote_addr)
+  * Bug fix: Progress percentage from Organizer now properly relayed to Client
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 13 Nov 2025 18:00:00 +0200
+
 clapshot-server (0.8.7) bookworm; urgency=low
 
   * Replace hardcoded ffmpeg parameter generation with user-editable bash scripts for transcoding and thumbnailing

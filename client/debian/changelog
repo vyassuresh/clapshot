@@ -1,3 +1,16 @@
+clapshot-client (0.9.0) bookworm; urgency=low
+
+  * New feature: Direct-to-comment share button
+  * Update Svelte, Vite, and Vitest to latest versions
+  * Update Flowbite packages and FontAwesome to v7
+  * Fix FontAwesome 7 icon overflow with --fa-width CSS variable
+  * Convert deprecated Svelte event directives to modern syntax
+  * Fix: Progress percentage from Organizer now properly displayed
+  * Update npm dependencies (happy-dom, vite)
+  * Fix test timing issues after dependency updates
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 13 Nov 2025 18:00:00 +0200
+
 clapshot-client (0.8.7) bookworm; urgency=low
 
   * Fix navbar dropdown menu CSS styling issues and upgrade Flowbite-Svelte
