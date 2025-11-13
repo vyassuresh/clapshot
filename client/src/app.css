@@ -19,6 +19,9 @@
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	-webkit-text-size-adjust: 100%;
+
+	/* Fix FontAwesome 7 default fixed-width behavior */
+	--fa-width: auto;
 }
 
 .popupContainer button.closeButton {
@@ -52,4 +55,5 @@
 	width: 100%;
 	text-align: left;
 }
+
 
