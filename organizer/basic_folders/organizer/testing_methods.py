@@ -19,9 +19,33 @@ import sqlalchemy
 
 import organizer
 from organizer.config import PATH_COOKIE_NAME
-from organizer.database.models import DbFolder, DbFolderItems, DbUser, DbMediaFile, DbSharedFolder
+from organizer.database.models import DbFolder, DbUser, DbMediaFile, DbSharedFolder
 from organizer.database.operations import db_get_or_create_user_root_folder
 from organizer.helpers.folders import SHARED_FOLDER_TOKEN_COOKIE_NAME
+
+# Import metaplugin tests so they get discovered by the test framework via inspect.getmembers()
+# These imports are required for test discovery - do NOT remove as "unused" imports!
+# The test framework dynamically discovers test functions by inspecting this module's namespace.
+from organizer.test_metaplugins import (  # noqa: F401
+    org_test__metaplugin_loader_basic,  # noqa: F401
+    org_test__metaplugin_loader_missing_dir,  # noqa: F401
+    org_test__metaplugin_loader_empty_dir,  # noqa: F401
+    org_test__metaplugin_on_init_hook,  # noqa: F401
+    org_test__metaplugin_extend_actions,  # noqa: F401
+    org_test__metaplugin_augment_folder_listing,  # noqa: F401
+    org_test__metaplugin_augment_listing_data,  # noqa: F401
+    org_test__metaplugin_exception_handling,  # noqa: F401
+    org_test__metaplugin_multiple_plugins,  # noqa: F401
+    org_test__metaplugin_invalid_plugin,  # noqa: F401
+    org_test__metaplugin_sha256_demo_user_only,  # noqa: F401
+    org_test__authz_plugin_allow,  # noqa: F401
+    org_test__authz_plugin_deny,  # noqa: F401
+    org_test__authz_plugin_defer,  # noqa: F401
+    org_test__authz_default_deny_non_owner,  # noqa: F401
+    org_test__authz_default_allow_owner,  # noqa: F401
+    org_test__authz_default_allow_admin,  # noqa: F401
+    org_test__authz_plugin_override_default,  # noqa: F401
+)
 
 
 async def list_tests_impl(oi: organizer.OrganizerInbound) -> org.ListTestsResponse:
@@ -179,7 +203,7 @@ async def org_test__authz_user_action_upload(oi: organizer.OrganizerInbound):
                 )
             )
             res = await oi.authz_user_action(req)
-            assert res.is_authorized == True
+            assert res.is_authorized
         else:
             await test_upload_auth(value, True)
 
@@ -1183,7 +1207,6 @@ async def org_test__admin_open_other_user_folder(oi: organizer.OrganizerInbound)
     # Create root folders for both users and add some content to regular user's folder
     with oi.db_new_session() as dbs:
         regular_root = await db_get_or_create_user_root_folder(dbs, regular_ses.user, oi.srv, oi.log)
-        admin_root = await db_get_or_create_user_root_folder(dbs, admin_ses.user, oi.srv, oi.log)
 
         # Create a test folder in regular user's space
         test_folder = await oi.folders_helper.create_folder(dbs, regular_ses, regular_root, "Regular User's Test Folder")
@@ -1776,7 +1799,7 @@ async def org_test__user_cleanup_after_content_transfer(oi: organizer.OrganizerI
             transferred_media = dbs.query(DbMediaFile).filter(DbMediaFile.id == media_file.id).one()
             assert transferred_media.user_id == dest_user_id, f"Media {media_file.id} should belong to dest user, belongs to {transferred_media.user_id}"
 
-    print(f"✓ Content transfer works correctly (user preserved, no automatic cleanup)")
+    print("✓ Content transfer works correctly (user preserved, no automatic cleanup)")
     print(f"✓ {total_expected_comments} comments preserved with source user still existing")
 
 
@@ -1795,12 +1818,6 @@ async def org_test__cmd_from_client__cleanup_empty_user(oi: organizer.OrganizerI
 
     # Create a test user with only an empty root folder
     test_user = clap.UserInfo(id="cleanup.test_user", name="Test User")
-    test_ses = org.UserSessionData(
-        sid="test_sid",
-        user=test_user,
-        is_admin=False,
-        cookies={}
-    )
 
     # Add both admin and test user to database and create their root folders
     with oi.db_new_session() as dbs:
@@ -1927,8 +1944,8 @@ async def org_test__admin_create_folder_in_user_context(oi: organizer.OrganizerI
     """
     Test that when an admin creates a folder while viewing another user's folder,
     the folder is created with the correct ownership (target user, not admin).
-    
-    This test checks for the bug where admin-created folders might end up 
+
+    This test checks for the bug where admin-created folders might end up
     in the admin's own context instead of the target user's context.
     """
     # Create two users - one regular user and one admin
@@ -1958,7 +1975,7 @@ async def org_test__admin_create_folder_in_user_context(oi: organizer.OrganizerI
     with oi.db_new_session() as dbs:
         regular_root = await db_get_or_create_user_root_folder(dbs, regular_ses.user, oi.srv, oi.log)
         admin_root = await db_get_or_create_user_root_folder(dbs, admin_ses.user, oi.srv, oi.log)
-        
+
         # Create a subfolder in regular user's space for testing
         test_parent_folder = await oi.folders_helper.create_folder(dbs, regular_ses, regular_root, "User's Parent Folder")
         regular_root_id = regular_root.id
@@ -1968,7 +1985,7 @@ async def org_test__admin_create_folder_in_user_context(oi: organizer.OrganizerI
 
     # Admin navigates to the regular user's folder (simulating admin browsing another user's folders)
     admin_ses.cookies[PATH_COOKIE_NAME] = json.dumps([regular_root_id, test_parent_folder_id])
-    
+
     # Admin creates a new folder while viewing the regular user's folder
     await oi.cmd_from_client(org.CmdFromClientRequest(
         ses=admin_ses,
@@ -1980,38 +1997,38 @@ async def org_test__admin_create_folder_in_user_context(oi: organizer.OrganizerI
     with oi.db_new_session() as dbs:
         # Get all folders to check ownership
         all_folders = dbs.query(DbFolder).all()
-        
+
         # Find the newly created folder
         admin_created_folder = None
         for folder in all_folders:
             if folder.title == "Admin Created Folder":
                 admin_created_folder = folder
                 break
-        
+
         assert admin_created_folder is not None, "Admin created folder should exist"
-        
+
         # Critical test: The folder should belong to the regular user, NOT the admin
         print(f"Admin created folder owner: {admin_created_folder.user_id}")
         print(f"Expected owner (regular user): {regular_user_id}")
         print(f"Admin user ID: {admin_user_id}")
-        
+
         assert admin_created_folder.user_id == regular_user_id, \
             f"BUG DETECTED: Admin created folder belongs to admin ({admin_created_folder.user_id}) instead of target user ({regular_user_id})"
-        
+
         # Verify the folder appears in the regular user's folder structure
         test_parent_folder_refreshed = dbs.query(DbFolder).filter_by(id=test_parent_folder_id).first()
         folder_contents = await oi.folders_helper.fetch_folder_contents(test_parent_folder_refreshed, regular_ses)
-        
+
         created_folders = [fi for fi in folder_contents if isinstance(fi, DbFolder) and fi.title == "Admin Created Folder"]
         assert len(created_folders) == 1, "Admin created folder should appear in regular user's folder structure"
-        
+
         # Double-check: verify the folder does NOT appear in admin's own folder structure
         admin_root_refreshed = dbs.query(DbFolder).filter_by(id=admin_root_id).first()
         admin_folder_contents = await oi.folders_helper.fetch_folder_contents(admin_root_refreshed, admin_ses)
-        
+
         admin_folders = [fi for fi in admin_folder_contents if isinstance(fi, DbFolder) and fi.title == "Admin Created Folder"]
         assert len(admin_folders) == 0, "Admin created folder should NOT appear in admin's own folder structure"
-        
+
         print("✓ Test passed: Admin created folder has correct ownership and location")
         print(f"✓ Folder 'Admin Created Folder' correctly belongs to user '{regular_user_id}' (not admin '{admin_user_id}')")
 

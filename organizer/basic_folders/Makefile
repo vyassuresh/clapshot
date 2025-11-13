@@ -29,7 +29,7 @@ TARGET_BIN := $(VENV)/bin/clapshot-organizer-basic-folders
 
 
 $(TARGET_BIN): $(VENV) $(PY_SRC) $(VENV)/bin/mypy
-	$(VENV)/bin/mypy organizer
+	$(VENV)/bin/mypy organizer example_metaplugins
 	$(PIP) install --no-build-isolation .
 
 $(VENV)/bin/mypy: $(VENV)
@@ -80,6 +80,10 @@ dist_deb/built.${ARCH}.target: ${DEB_SRC} deps/$(PROTOLIB)
 	dpkg-buildpackage -us -uc -b
 	@mkdir -p dist_deb   # Create the directory if it doesn't exist (in Docker its a link to ../ where the deb is)
 	touch $@
+
+test-local: $(TARGET_BIN)
+	# Organizer depends on Clapshot Server's gRPC calls and context, so tests are initialized by it, over actual gRPC session
+	cd ../../server && FILTER=org_test_ make test-local
 
 debian-local: dist_deb/built.${ARCH}.target
 

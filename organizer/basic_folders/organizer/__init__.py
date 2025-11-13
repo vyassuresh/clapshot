@@ -1,9 +1,6 @@
 import json
 from logging import Logger
 
-from grpclib import GRPCError
-from grpclib.const import Status as GrpcStatus
-
 import clapshot_grpc.proto.clapshot as clap
 import clapshot_grpc.proto.clapshot.organizer as org
 
@@ -13,7 +10,7 @@ from clapshot_grpc.connect import connect_back_to_server, open_database
 import sqlalchemy
 from sqlalchemy import orm
 
-from organizer.config import VERSION, MODULE_NAME
+from organizer.config import VERSION, MODULE_NAME, METAPLUGINS_DIR
 
 from .migration_methods import check_migrations_impl, apply_migration_impl, db_integrity_tests
 from .user_session_methods import on_start_user_session_impl, navigate_page_impl, cmd_from_client_impl
@@ -24,6 +21,7 @@ from .authz_methods import authz_user_action_impl
 from .helpers.folders import FoldersHelper
 from .helpers.pages import PagesHelper
 from .helpers.actiondefs import ActiondefsHelper
+from . import metaplugin as mp
 
 
 try:
@@ -45,6 +43,8 @@ class OrganizerInbound(org.OrganizerInboundBase):
         self.log = logger
         self.debug = debug
         self.server_info = None  # Will be set during handshake
+        self.metaplugin_loader = mp.MetaPluginLoader(METAPLUGINS_DIR, logger)
+        self.metaplugin_loader.load_plugins()
 
 
     # Migration methods
@@ -77,10 +77,21 @@ class OrganizerInbound(org.OrganizerInboundBase):
         self.db, self.db_new_session = await open_database(server_info.db, debug_sql, self.log)
 
         self.folders_helper = FoldersHelper(self.db_new_session, self.srv, self.log)
-        self.pages_helper = PagesHelper(self.folders_helper, self.srv, self.db_new_session, self.log)
+        self.pages_helper = PagesHelper(self.folders_helper, self.srv, self.db_new_session, self.log, organizer_inbound=self)
         self.actions_helper = ActiondefsHelper()
 
         await db_integrity_tests(self)
+
+        # Initialize metaplugins with context
+        metaplugin_context = mp.OrganizerContext(
+            db_session=self.db_new_session,
+            srv=self.srv,
+            log=self.log,
+            folders_helper=self.folders_helper,
+            pages_helper=self.pages_helper,
+        )
+        await self.metaplugin_loader.call_on_init_hooks(metaplugin_context)
+
         return clap.Empty()
 
 

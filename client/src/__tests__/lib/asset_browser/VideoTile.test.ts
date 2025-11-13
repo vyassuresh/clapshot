@@ -142,10 +142,10 @@ describe('VideoTile', () => {
     ]);
 
     const { container } = render(VideoTile, { item: mediaFile });
-    
+
     // Wait for component to mount and subscribe to store
     await vi.waitFor(() => {
-      const progressElement = screen.queryByText('transcoding...');
+      const progressElement = screen.queryByText('transcoding');
       expect(progressElement).toBeInTheDocument();
     });
 
@@ -220,7 +220,7 @@ describe('VideoTile', () => {
     const { container } = render(VideoTile, { item: mediaFile });
 
     await vi.waitFor(() => {
-      expect(screen.getByText('transcoding...')).toBeInTheDocument();
+      expect(screen.getByText('transcoding')).toBeInTheDocument();
     });
 
     // Should show progress for video-a only (30%)
@@ -246,17 +246,17 @@ describe('VideoTile', () => {
     ]);
 
     const { container } = render(VideoTile, { item: mediaFile });
-    
+
     // Wait for progress bar to appear
     await vi.waitFor(() => {
-      expect(screen.getByText('transcoding...')).toBeInTheDocument();
+      expect(screen.getByText('transcoding')).toBeInTheDocument();
     });
 
     // Complete transcoding (remove from progress reports)
     latestProgressReports.set([]);
 
     await vi.waitFor(() => {
-      const transcodingElement = screen.queryByText('transcoding...');
+      const transcodingElement = screen.queryByText('transcoding');
       expect(expectElementToBeHiddenOrInert(transcodingElement)).toBe(true);
     });
   });

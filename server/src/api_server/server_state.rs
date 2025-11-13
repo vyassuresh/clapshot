@@ -127,8 +127,11 @@ impl ServerState {
     }
 
     /// Send a user message to given recipients.
-    pub fn push_notify_message(&self, msg: &models::MessageInsert, send_to: SendTo, persist: bool) -> Res<()> {
-        let cmd = client_cmd!(ShowMessages, {msgs: vec![msg.to_proto3()]});
+    pub fn push_notify_message(&self, msg: &models::MessageInsert, send_to: SendTo, persist: bool, progress: Option<f32>) -> Res<()> {
+        let mut proto_msg = msg.to_proto3();
+        proto_msg.progress = progress;
+
+        let cmd = client_cmd!(ShowMessages, {msgs: vec![proto_msg]});
         let send_res = self.emit_cmd(cmd, send_to);
         if let Ok(sent_count) = send_res {
             if persist {

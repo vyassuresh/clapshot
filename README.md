@@ -135,12 +135,21 @@ Clapshot includes an extensible [Organizer Plugin system](doc/organizer-plugins.
 
 The included "[basic_folders](organizer/basic_folders/README.md)" organizer (Python) provides:
 - **Hierarchical Folders**: Personal folder structures for organizing media files
-- **Folder Sharing**: Secure token-based sharing of folder contents (requires authentication)
+- **Folder Sharing**: Token-based sharing of folder contents (still requires authentication to access)
 - **Admin Interface**: User management with batch operations and ownership transfer
-- **Access Control**: Permission boundaries and cross-user navigation for administrators
+- **Metaplugin extensions**: Easier extension in Python:
 
-Custom organizers can integrate with existing systems (LDAP, project management databases, etc.) through custom development.
+### Customization with Basic_Folders Metaplugins
 
+**NEW: Add custom functionality by dropping a single Python file into `/opt/clapshot-org-bf-metaplugins`** – no need to modify core code or deal with gRPC protocol directly. Example use cases:
+
+- **Add custom popup menu actions** to folders and media files (e.g., "Auto-subtitle", "Export to archive", "Send to review")
+- **Implement custom workflows** and business logic specific to your organization (e.g. video rename, ownership transfer, auto-folders)
+- **Integrate with external systems** (databases, LDAP, version controls, APIs) for authorization or processing
+- **Modify the UI dynamically** based on user roles, folder properties, or file metadata
+- **Run background process** such as automatic video expiration and trashing
+
+This approach is **easier to develop** and **more robust against upgrades** than modifying core code or writing a full custom Organizer (if you're fine with Python). See [METAPLUGINS.md](organizer/basic_folders/METAPLUGINS.md) for complete documentation and a [working example](organizer/basic_folders/example_metaplugins/calculate_sha256.py).
 
 ## Development Setup
 

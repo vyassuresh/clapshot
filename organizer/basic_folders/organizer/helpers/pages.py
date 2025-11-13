@@ -10,17 +10,19 @@ from sqlalchemy import orm
 from organizer.database.operations import db_get_or_create_user_root_folder
 from organizer.helpers import media_type_to_vis_icon
 from organizer.utils import folder_path_to_uri_arg
+import organizer.metaplugin as mp
 
 from .folders import FoldersHelper
 from organizer.database.models import DbMediaFile, DbFolder, DbUser
 
 
 class PagesHelper:
-    def __init__(self, folders_helper: FoldersHelper, srv: org.OrganizerOutboundStub, db_new_session: orm.sessionmaker, log):
+    def __init__(self, folders_helper: FoldersHelper, srv: org.OrganizerOutboundStub, db_new_session: orm.sessionmaker, log, organizer_inbound=None):
         self.folders_helper = folders_helper
         self.srv = srv
         self.db_new_session = db_new_session
         self.log = log
+        self.organizer_inbound = organizer_inbound
 
 
     async def construct_navi_page(self, ses: org.UserSessionData, cookie_override: Optional[str] = None) -> org.ClientShowPageRequest:
@@ -155,6 +157,14 @@ class PagesHelper:
                 listing_items.append(await media_file_to_page_item(itm.id, popup_actions))
             else:
                 raise ValueError(f"Unknown item type: {itm}")
+
+        # Let metaplugins augment folder listing items and data
+        if self.organizer_inbound:
+            folder_context = mp.FolderContext(folder=cur_folder, parent=parent_folder)
+            listing_items = await self.organizer_inbound.metaplugin_loader.call_augment_folder_listing_hooks(
+                listing_items, folder_context, ses)
+            listing_data = await self.organizer_inbound.metaplugin_loader.call_augment_listing_data_hooks(
+                listing_data, folder_context, ses)
 
         # Only allow uploads if user owns the folder or is admin, AND has upload permission
         from ..authz_methods import check_upload_permission

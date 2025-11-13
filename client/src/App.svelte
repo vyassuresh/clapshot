@@ -615,7 +615,7 @@ function addMediaProgressReport(mediaFileId?: String, msg?: String, progress?: n
 
     // Filter out any old reports for this media file
     $latestProgressReports = $latestProgressReports.filter((r: MediaProgressReport) => r.mediaFileId != report.mediaFileId);
-    if (report.progress !== 1.0) {  // Hide progress bar immediately when done
+    if (report.progress !== undefined && report.progress < 1.0) {  // Hide progress bar immediately when done
         $latestProgressReports = [...$latestProgressReports, report];
     }
 

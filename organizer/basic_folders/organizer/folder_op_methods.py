@@ -31,8 +31,10 @@ async def move_to_folder_impl(oi: organizer.OrganizerInbound, req: org.MoveToFol
 
     if not dst_folder:
         raise GRPCError(GrpcStatus.NOT_FOUND, "Destination folder not found")
-    if dst_folder.user_id != req.ses.user.id and not req.ses.is_admin:
-        raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot move items to another user's folder")
+
+    # Check authorization via metaplugins + default checks
+    from .authz_methods import check_action_authorization
+    await check_action_authorization(oi, "move_item", folder=dst_folder, ses=req.ses)
 
 
     for it in req.ids:

@@ -40,6 +40,15 @@ Written in Python (due to popularity), but Organizers can be implemented in any 
 - **Upload integration**: Upload files directly into specific folders
 - **Responsive design**: Works seamlessly across different screen sizes
 
+### Extensibility with Metaplugins
+- **Custom actions**: Add new popup menu actions for specific workflows without modifying core code
+- **Conditional UI**: Show/hide actions based on user, folder, or file properties
+- **Authorization overrides**: Implement custom permission checks (LDAP, service accounts, external APIs)
+- **External integrations**: Connect to external APIs, databases, or services
+- **Custom workflows**: Implement organization-specific business logic (approval flows, archiving, etc.)
+- **Visual customization**: Modify item appearance (colors, icons) based on metadata or state
+- **See [METAPLUGINS.md](METAPLUGINS.md)** for full documentation and examples
+
 ## Technical Implementation
 
 The plugin extends Clapshot with three additional database tables:
@@ -56,6 +65,8 @@ All tables use foreign keys to maintain referential integrity with Clapshot Serv
 - **Database sharing**: Uses server's SQLite database with additional plugin tables
 - **Session management**: Integrates with server's user authentication system
 - **Callback system**: Registers custom actions for client-side folder operations
+- **Metaplugin system**: Extension hooks for loading custom Python modules at runtime
+- **Authorization framework**: Pluggable permission checks allowing custom rules via metaplugins
 
 ### Security & Robustness
 - **Permission validation**: All operations verify user ownership and access rights

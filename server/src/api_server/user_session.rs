@@ -31,7 +31,7 @@ macro_rules! send_user_msg(
             message: $msg.into(),
             details: $details.into(),
             subtitle_id: None,
-        }, crate::api_server::SendTo::UserId(&$user_id), $persist)?;
+        }, crate::api_server::SendTo::UserId(&$user_id), $persist, None)?;
     };
     ($event_name:expr, $user_id:expr, $server:expr, $topic:expr, $msg:expr, $persist:expr) => {
         send_user_error!($user_id, $server, $topic, $msg, String::new(), $persist)

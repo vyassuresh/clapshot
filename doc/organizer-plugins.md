@@ -27,6 +27,30 @@ The reason folder functionality isn't built directly into the main Clapshot serv
 
 Thus, the `basic_folders` plugin serves both as a practical UI enhancement for basic usage, and also as proof-of-concept and a starting point for developers who want to create more sophisticated Organizer plugins tailored to their specific needs.
 
+### Metaplugins for `basic_folders`
+
+The `basic_folders` organizer includes a lightweight extension mechanism called **metaplugins**. Metaplugins let you add custom functionality on top of the standard folder organization, without writing a full gRPC-based organizer from scratch.
+
+**If you want to try implementing custom workflows, metaplugins are the recommended starting point.** They're much simpler than building a full organizer, and you get folder management for free. We especially recommend reading through the [calculate_sha256.py](../organizer/basic_folders/example_metaplugins/calculate_sha256.py) example, which demonstrates many practical patterns you'll need.
+
+With metaplugins, you can:
+- Add custom popup menu actions for folders and media files
+- Modify folder listings before they're shown to users
+- Handle custom commands from the client
+- Inject custom data into the UI context
+- Override permission checks (e.g., integrate with LDAP, external APIs)
+- React to lifecycle events (initialization, shutdown)
+
+Metaplugins are simple Python files that are automatically discovered and loaded from a configurable directory. They implement hook methods from the `MetaPluginInterface` to extend functionality at specific points in the organizer's workflow.
+
+**See [METAPLUGINS.md](../organizer/basic_folders/METAPLUGINS.md)** for complete documentation, including:
+- Development setup with IDE type checking
+- Hook reference and extension points
+- Working example ([calculate_sha256.py](../organizer/basic_folders/example_metaplugins/calculate_sha256.py)) demonstrating background processing, file system access, and real-time progress updates
+- Best practices for error handling and performance
+
+Metaplugins make it easy to implement organization-specific workflows (approval flows, archiving, custom integrations) while still benefiting from basic_folders' standard folder management features.
+
 
 ## Architecture
 

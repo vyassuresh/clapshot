@@ -27,13 +27,17 @@ let basecolor = $state(orig_basecolor);
 
 // Watch for (transcoding) progress reports from server, and update progress bar if one matches this item.
 let progress: number|undefined = $state(undefined);
+let progressMsg: string|undefined = $state(undefined);
 
 // Use effect to watch for progress reports
 $effect(() => {
     if ($latestProgressReports) {
-        const newProgress = $latestProgressReports.find((r: MediaProgressReport) => r.mediaFileId === item.id)?.progress;
-        if (newProgress !== progress) {
+        const report = $latestProgressReports.find((r: MediaProgressReport) => r.mediaFileId === item.id);
+        const newProgress = report?.progress;
+        const newMsg = report?.msg;
+        if (newProgress !== progress || newMsg !== progressMsg) {
             progress = newProgress;
+            progressMsg = newMsg;
             basecolor = progress !== undefined ? rgbToCssColor(40, 40, 40) : orig_basecolor;
         }
     }
@@ -68,7 +72,7 @@ function fmt_date(d: Date | undefined) {
     <!-- Progress bar (if any) -->
     {#if progress !== undefined}
         <div transition:slide class="mb-1">
-            <div class="w-full text-xs font-extralight italic text-center mt-1 mb-1">transcoding...</div>
+            <div class="w-full text-xs font-extralight italic text-center mt-1 mb-1">{progressMsg || 'Processing...'}</div>
             <div class="w-full h-1 bg-black">
                 <div class="h-full bg-amber-500" style="width: {progress * 100}%"></div>
             </div>

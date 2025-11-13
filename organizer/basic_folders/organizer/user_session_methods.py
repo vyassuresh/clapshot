@@ -25,9 +25,16 @@ async def on_start_user_session_impl(oi: organizer.OrganizerInbound, req: org.On
     Called by the server when a user session is started, to define custom actions for the client.
     """
     assert req.ses.sid, "No session ID"
+
+    # Get base actions from organizer
+    actions = oi.actions_helper.make_custom_actions_map()
+
+    # Let metaplugins extend/modify actions
+    actions = oi.metaplugin_loader.call_extend_actions_hooks(actions)
+
     await oi.srv.client_define_actions(org.ClientDefineActionsRequest(
         sid = req.ses.sid,
-        actions = oi.actions_helper.make_custom_actions_map()))
+        actions = actions))
 
     return org.OnStartUserSessionResponse()
 
@@ -100,11 +107,15 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
     => These command names are organizer-specific and could be named anything.
     """
     try:
+        args = parse_json_dict(cmd.args)
+
+        # Try metaplugins first
+        if await oi.metaplugin_loader.call_handle_custom_command_hooks(cmd.cmd, args, cmd.ses, oi):
+            return clap.Empty()
+
         if cmd.cmd == "new_folder":
-            args = parse_json_dict(cmd.args)
             parent_folder = (await oi.folders_helper.get_current_folder_path(cmd.ses, None))[-1]
             # Create folder & refresh user's view
-            args = parse_json_dict(cmd.args)
             if new_folder_name := args.get("name"):
                 with oi.db_new_session() as dbs:
                     new_fld = await oi.folders_helper.create_folder(dbs, cmd.ses, parent_folder, new_folder_name)
@@ -133,16 +144,16 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             # Construct new breadcrumb trail
             folder_path, _root_folder = await oi.folders_helper.get_current_folder_path(cmd.ses, None)
             trail = [f.id for f in folder_path]
-            
+
             if folder_id in trail:
                 # Going back up in current trail => remove all after this folder
                 trail = trail[:trail.index(folder_id)+1]
             else:
                 # Check if we're crossing ownership boundaries
                 current_owner_id = folder_path[-1].user_id if folder_path else None
-                
-                if (current_owner_id != target_owner_id and 
-                    target_owner_id != cmd.ses.user.id and 
+
+                if (current_owner_id != target_owner_id and
+                    target_owner_id != cmd.ses.user.id and
                     cmd.ses.is_admin):
                     # Admin is switching to another user's folder - start fresh trail from target
                     oi.log.debug(f"Admin switching from {current_owner_id} to {target_owner_id} folders - starting fresh trail")
@@ -169,12 +180,15 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                 raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "rename_folder command missing 'id' or 'new_name' argument")
             folder_id = int(args["id"])
             with oi.db_new_session() as dbs:
+                fld = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
+                if not fld:
+                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{args['id']}' not found")
+
+                # Check authorization via metaplugins + default checks
+                from .authz_methods import check_action_authorization
+                await check_action_authorization(oi, "rename_folder", folder=fld, ses=cmd.ses)
+
                 with dbs.begin_nested():
-                    fld = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
-                    if not fld:
-                        raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{args['id']}' not found")
-                    if fld.user_id != cmd.ses.user.id and not cmd.ses.is_admin:
-                        raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot rename another user's folder")
                     fld.title = args["new_name"]
 
             oi.log.debug(f"Renamed folder '{fld.id}' to '{fld.title}'")
@@ -186,6 +200,14 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             if not args or not args.get("id"):
                 raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "trash_folder command missing 'id' argument")
             folder_id = int(args["id"])
+
+            # Get folder and check authorization
+            from .authz_methods import check_action_authorization
+            with oi.db_new_session() as dbs:
+                fld = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
+                if not fld:
+                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{folder_id}' not found")
+                await check_action_authorization(oi, "trash_folder", folder=fld, ses=cmd.ses)
 
             # Delete the folder and its contents, gather media file IDs to delete later (after transaction, to avoid DB locks)
             media_to_delete = []
@@ -306,7 +328,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                     target_folder = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
                     if not target_folder:
                         raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{folder_id}' not found")
-                    
+
                     user_id = target_folder.user_id
                     from .folder_op_methods import _cleanup_empty_user
                     was_deleted = await _cleanup_empty_user(dbs, user_id, oi.log)
