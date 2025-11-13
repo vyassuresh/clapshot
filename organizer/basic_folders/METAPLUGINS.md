@@ -14,7 +14,7 @@ This makes it relatively easy to implement simple customizations without too muc
 
 ## Example Metaplugin
 
-See `example_metaplugins/calculate_sha256.py` for a working example that demonstrates user-specific actions, file system access, and automated comment creation. This example is used by automated tests and included in the demo Docker image (via `make run-docker`).
+See [`calculate_sha256.py`](example_metaplugins/calculate_sha256.py) for a working example that demonstrates user-specific actions, file system access, and automated comment creation. This example is used by automated tests and included in the demo Docker image (via `make run-docker`).
 
 ## Development Setup
 
@@ -122,7 +122,7 @@ When writing JavaScript code in actions, protobuf fields use **camelCase**, not 
 - ✅ `item.mediaFile.id` (correct)
 - ❌ `item.media_file.id` (wrong - will be undefined)
 
-For complete implementation details, see the `extend_actions` hook in [`example_metaplugins/calculate_sha256.py`](example_metaplugins/calculate_sha256.py).
+For complete implementation details, see the `extend_actions` hook in [`alculate_sha256.py`](example_metaplugins/calculate_sha256.py).
 
 ### 4. `handle_custom_command(cmd, args, session, organizer) -> bool`
 
@@ -144,7 +144,7 @@ Called when the client sends an organizer command. Plugins are tried in order be
 - Call external APIs
 - Refresh the UI after operations
 
-For a working implementation example, see the `handle_custom_command` hook in [`example_metaplugins/calculate_sha256.py`](example_metaplugins/calculate_sha256.py).
+For a working implementation example, see the `handle_custom_command` hook in [`calculate_sha256.py`](example_metaplugins/calculate_sha256.py).
 
 ### 5. `augment_folder_listing(listing_items, folder_context: FolderContext, session) -> list`
 
