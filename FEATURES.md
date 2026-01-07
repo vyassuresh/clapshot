@@ -95,13 +95,13 @@ Rust-based server with concurrent processing for media operations.
 
 ### **Scriptable Transcoding and Thumbnailing**
 Customizable media processing through external scripts with hardware acceleration support.
-  - **Custom Scripts**: Configurable transcoding and thumbnailing scripts for specialized workflows
+  - **Custom Scripts**: Configurable transcoding decision, transcoding, and thumbnailing scripts for specialized workflows
   - **Hardware Acceleration**: Support for Intel QSV, NVIDIA NVENC, VA-API, and Apple VideoToolbox
   - **Progress Reporting**: Real-time progress updates during transcoding operations
   - **Environment Variables**: Standardized interface for script parameters and configuration
   - **Audio Waveform Generation**: Automatic waveform visualization for audio files
   - **Multi-Format Output**: Configurable output formats and quality settings
-- *References: [doc/transcoding.md](doc/transcoding.md), [scripts/clapshot-transcode](server/scripts/clapshot-transcode), [scripts/clapshot-thumbnail](server/scripts/clapshot-thumbnail), [src1](server/src/video_pipeline/script_processor.rs)*
+- *References: [doc/transcoding.md](doc/transcoding.md), [scripts/clapshot-transcode-decision](server/scripts/clapshot-transcode-decision), [scripts/clapshot-transcode](server/scripts/clapshot-transcode), [scripts/clapshot-thumbnail](server/scripts/clapshot-thumbnail), [src1](server/src/video_pipeline/script_processor.rs)*
 
 ### **Special `trash/` and `rejected/` folders**
 Special folders for "deleted" (trashed) and non-ingestible files.
