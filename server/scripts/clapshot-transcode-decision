@@ -96,7 +96,7 @@ case "$MEDIA_TYPE" in
 
         # Check if codec is browser-compatible
         case "$CODEC_LOWER" in
-            h264|avc|hevc|h265)
+            h264|avc|hevc|h265|vp8|vp9|av1)
                 CODEC_FINE=true
                 ;;
             *)
@@ -106,7 +106,7 @@ case "$MEDIA_TYPE" in
 
         # Check if container is browser-compatible
         case "$CONTAINER_LOWER" in
-            mp4|mkv)
+            mp4|mkv|webm)
                 CONTAINER_FINE=true
                 ;;
             *)
