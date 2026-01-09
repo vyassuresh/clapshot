@@ -12,7 +12,6 @@ Clapshot is a self-hosted video/media review and annotation platform designed fo
 - ⚠️ **Limited mobile support:** Clapshot is a desktop-first application
 - **iOS/iPad issues:** Double-tap doesn't open videos/folders, video player controls may not function properly
 - **Touch interface:** Drawing annotation submission fails on mobile browsers
-- **Recommendation:** Use desktop browsers for production work; mobile browsers for viewing only
 
 For details, see [GitHub issue #68](https://github.com/elonen/clapshot/issues/68).
 
