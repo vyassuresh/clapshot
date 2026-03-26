@@ -91,7 +91,7 @@ function initializeVolume() {
 run(() => {
     if (videoElem && audio_volume !== undefined) {
         videoElem.volume = audio_volume / 100;
-        LocalStorageCookies.set('audio_volume', audio_volume.toString(), null);
+        LocalStorageCookies.set('audio_volume', audio_volume.toString(), Number.MAX_SAFE_INTEGER);
     }
 });
 
