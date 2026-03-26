@@ -67,6 +67,8 @@ const translations = {
         'comments.deleteShort': 'Del',
         'comments.yourReply': 'Your reply...',
         'comments.editedSuffix': '(edited)',
+        'comments.sortByTimecode': 'Sort: timecode',
+        'comments.sortByDate': 'Sort: date posted',
 
         'subtitles.edit': 'Edit subtitle',
         'subtitles.label': 'Title',
@@ -126,6 +128,8 @@ const translations = {
         'comments.deleteShort': '删除',
         'comments.yourReply': '请输入回复...',
         'comments.editedSuffix': '（已编辑）',
+        'comments.sortByTimecode': '排序：时间码',
+        'comments.sortByDate': '排序：发布日期',
 
         'subtitles.edit': '编辑字幕',
         'subtitles.label': '标题',
@@ -185,6 +189,8 @@ const translations = {
         'comments.deleteShort': 'Poista',
         'comments.yourReply': 'Vastauksesi...',
         'comments.editedSuffix': '(muokattu)',
+        'comments.sortByTimecode': 'Järjestys: aikakoodi',
+        'comments.sortByDate': 'Järjestys: lisäyspäivä',
 
         'subtitles.edit': 'Muokkaa tekstitystä',
         'subtitles.label': 'Otsikko',

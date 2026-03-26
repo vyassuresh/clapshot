@@ -21,12 +21,21 @@ import {folderItemsToIDs, type VideoListDefItem} from "@/lib/asset_browser/types
 import FolderListing from './lib/asset_browser/FolderListing.svelte';
 import LocalStorageCookies from './cookies';
 import RawHtmlItem from './lib/asset_browser/RawHtmlItem.svelte';
+import { indentCommentTree, countTimedRootComments, type CommentSortMode } from '@/lib/commentTree';
 import { ClientToServerCmd } from '@clapshot_protobuf/typescript/dist/src/client';
 
 let videoPlayer: VideoPlayer | undefined = $state();
 let commentInput: CommentInput | undefined = $state();
 let debugLayout: boolean = false;
 let uiConnectedState: boolean = $state(false); // true if UI should look like we're connected to the server
+
+let commentSortMode: CommentSortMode = $state((LocalStorageCookies.get('comment_sort_mode') as CommentSortMode) ?? 'timecode');
+
+function toggleCommentSort() {
+    commentSortMode = commentSortMode === 'timecode' ? 'date' : 'timecode';
+    LocalStorageCookies.set('comment_sort_mode', commentSortMode, Number.MAX_SAFE_INTEGER);
+    $allComments = indentCommentTree($allComments, commentSortMode);
+}
 
 let collabDialogAck = $state(false);  // true if user has clicked "OK" on the collab dialog
 let lastCollabControllingUser: string | null = null;    // last user to control the video in a collab session
@@ -136,7 +145,7 @@ function onCommentInputButton(e: any) {
 
 function onDisplayComment(e: any) {
     if (!$curVideo) { throw Error("No video loaded"); }
-    if (videoPlayer) videoPlayer.seekToSMPTE(e.timecode);
+    if (videoPlayer && e.timecode) videoPlayer.seekToSMPTE(e.timecode);
     // Close draw mode while showing (drawing from a saved) comment
     if (videoPlayer && e.drawing) { videoPlayer.setDrawing(e.drawing); }
     if (e.subtitleId) { $curSubtitle = $curVideo.subtitles.find((s) => s.id == e.subtitleId) ?? null; }
@@ -865,32 +874,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 }
 
                 // Re-sort / turn updated comment tree into an indented, ordered list for UI
-                function indentCommentTree(items: IndentedComment[]): IndentedComment[]
-                {
-                    let rootComments = items.filter(item => item.comment.parentId == null);
-                    rootComments.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
-
-                    // Recursive DFS function to traverse and build the ordered list
-                    function dfs(c: IndentedComment, depth: number, result: IndentedComment[]): void {
-                        if (result.find((it) => it.comment.id === c.comment.id)) return;  // already added, cut infinite loop
-                        result.push({ ...c, indent: depth });
-                        let children = items.filter(item => (item.comment.parentId === c.comment.id));
-                        children.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
-                        for (let child of children)
-                        dfs(child, depth + 1, result);
-                    }
-
-                    let res: IndentedComment[] = [];
-                    rootComments.forEach((c) => dfs(c, 0, res));
-
-                    // Add any orphaned comments to the end (we may receive them out of order)
-                    items.forEach((c) => {
-                        if (!res.find((it) => it.comment.id === c.comment.id))
-                        res.push(c);
-                    });
-                    return res;
-                }
-                $allComments = indentCommentTree($allComments);
+                $allComments = indentCommentTree($allComments, commentSortMode);
 
                 // Try to activate comment from URL hash if conditions are met
                 tryActivateHashComment();
@@ -1072,6 +1056,13 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
 
             {#if $allComments.length > 0 || $curSubtitle}
             <div id="comment_list" transition:fade class="flex flex-col h-full w-72 bg-gray-900 py-2 px-2 ml-2">
+                {#if countTimedRootComments($allComments) >= 2}
+                <div class="flex-none flex items-center text-xs text-gray-500 pb-1">
+                    <button class="hover:text-gray-300 transition-colors" onclick={toggleCommentSort}>
+                        <i class="fa fa-sort mr-1"></i>{commentSortMode === 'timecode' ? $t('comments.sortByTimecode') : $t('comments.sortByDate')}
+                    </button>
+                </div>
+                {/if}
                 <div class="flex-grow overflow-y-auto space-y-2">
                     {#each $allComments as it}
                         <CommentCard
