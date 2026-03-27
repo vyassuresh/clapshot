@@ -71,9 +71,9 @@ function finalize(e: any) {
 }
 
 // Convert `basecolor` (folder color override) to a CSS variable.
-let basecolor = visualization?.baseColor ?
+let basecolor = $derived(visualization?.baseColor ?
     rgbToCssColor(visualization.baseColor.r, visualization.baseColor.g, visualization.baseColor.b) :
-    '#3b73a5';
+    '#3b73a5');
 
 </script>
 

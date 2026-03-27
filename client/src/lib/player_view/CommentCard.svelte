@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { flushSync } from 'svelte';
+    import { flushSync, untrack } from 'svelte';
 
 
 import { scale, slide } from "svelte/transition";
@@ -26,7 +26,7 @@ let showActions: boolean = $state(false);
 let showReply: boolean = $state(false);
 let replyInput: HTMLInputElement | undefined = $state();
 
-let commentText = $state(comment.comment);
+let commentText = $state(untrack(() => comment.comment));
 
 $effect(() => {
     commentText = comment.comment;

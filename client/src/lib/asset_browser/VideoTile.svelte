@@ -18,29 +18,22 @@ import type { MediaProgressReport } from '@/types';
 
 export function data() { return item; }
 
-// Convert `basecolor` (folder color override) to a CSS variable.
-let orig_basecolor = visualization?.baseColor ?
-    rgbToCssColor(visualization.baseColor.r, visualization.baseColor.g, visualization.baseColor.b) :
-    rgbToCssColor(71, 85, 105);
-
-let basecolor = $state(orig_basecolor);
-
 // Watch for (transcoding) progress reports from server, and update progress bar if one matches this item.
 let progress: number|undefined = $state(undefined);
 let progressMsg: string|undefined = $state(undefined);
 
-// Use effect to watch for progress reports
+// basecolor: gray during transcoding, otherwise derived from visualization prop
+let basecolor = $derived(
+    progress !== undefined ? rgbToCssColor(40, 40, 40) :
+    visualization?.baseColor ?
+        rgbToCssColor(visualization.baseColor.r, visualization.baseColor.g, visualization.baseColor.b) :
+        rgbToCssColor(71, 85, 105)
+);
+
 $effect(() => {
-    if ($latestProgressReports) {
-        const report = $latestProgressReports.find((r: MediaProgressReport) => r.mediaFileId === item.id);
-        const newProgress = report?.progress;
-        const newMsg = report?.msg;
-        if (newProgress !== progress || newMsg !== progressMsg) {
-            progress = newProgress;
-            progressMsg = newMsg;
-            basecolor = progress !== undefined ? rgbToCssColor(40, 40, 40) : orig_basecolor;
-        }
-    }
+    const report = $latestProgressReports?.find((r: MediaProgressReport) => r.mediaFileId === item.id);
+    progress = report?.progress;
+    progressMsg = report?.msg;
 });
 
 function fmt_date(d: Date | undefined) {

@@ -1,5 +1,6 @@
 <script lang="ts">
 
+import { untrack } from 'svelte';
 import { scale, slide } from "svelte/transition";
 import { curSubtitle, curUserId, curUserIsAdmin, curVideo, subtitleEditingId } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
@@ -16,10 +17,11 @@ import { t } from '@/i18n';
 
     let { sub, isDefault, onupdatesubtitle, ondeletesubtitle, onchangesubtitle }: Props = $props();
 
-    let title = $state(sub.title);
-    let languageCode = $state(sub.languageCode);
-    let timeOffset = $state(sub.timeOffset);
-    let isDefaultState = $state(isDefault ?? false);
+    // untrack(): intentionally capture initial prop values only (component is recreated on each edit toggle)
+    let title = $state(untrack(() => sub.title));
+    let languageCode = $state(untrack(() => sub.languageCode));
+    let timeOffset = $state(untrack(() => sub.timeOffset));
+    let isDefaultState = $state(untrack(() => isDefault ?? false));
 
 
 function doSave() {
