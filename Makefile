@@ -1,3 +1,4 @@
+SHELL := /bin/bash
 .PHONY:  clean docker test run-docker run build-docker-demo
 
 UID=$(shell id -u)
