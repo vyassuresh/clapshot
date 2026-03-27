@@ -163,6 +163,11 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_no_transcode() -> anyhow::Result<()>
     {
+        // Install a metrics recorder to verify on_media_file_ingested code path is reached
+        let metrics_recorder = metrics_util::debugging::DebuggingRecorder::new();
+        let metrics_snapshotter = metrics_recorder.snapshotter();
+        metrics_recorder.install().expect("Failed to install metrics recorder");
+
         cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None, None, IngestUsernameFrom::FileOwner]
             // Copy test file to incoming dir
             let mp4_file = "60fps-example.mp4";
@@ -211,6 +216,17 @@ mod integration_test
                 }
             }
             assert!(got_new_comment);
+
+            // Verify the msg_relay detected MediaFileAdded and reached the organizer notification path
+            let snapshot = metrics_snapshotter.snapshot();
+            let attempt_count: u64 = snapshot.into_vec().iter()
+                .filter(|(key, _, _, _)| key.key().name() == "on_media_file_ingested.attempt")
+                .map(|(_, _, _, val)| match val {
+                    metrics_util::debugging::DebugValue::Counter(v) => *v,
+                    _ => 0,
+                })
+                .sum();
+            assert!(attempt_count > 0, "Expected on_media_file_ingested.attempt counter > 0, got {attempt_count}");
         }
         Ok(())
     }
@@ -875,6 +891,7 @@ mod integration_test
             let media_file = open_media_file(&mut ws, &vid).await.media_file.unwrap();
             let current_user = whoami::username();
             assert_eq!(media_file.user_id, current_user, "Username should match file owner");
+
         }
         Ok(())
     }

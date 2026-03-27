@@ -603,14 +603,44 @@ async fn run_api_server_async(
                 proto_msg.progress = m.progress;
 
                 // Message to all watchers of a media file
-                if let Some(vid) = m.media_file_id {
+                if let Some(ref vid) = m.media_file_id {
                     if let Err(_) = server_state.emit_cmd(
                         client_cmd!(ShowMessages, { msgs: vec![proto_msg.clone()] }),
-                        SendTo::MediaFileId(&vid)
+                        SendTo::MediaFileId(vid)
                     ) {
                         tracing::error!(media_file=vid, "Failed to send notification to media file watchers.");
                     }
                 };
+
+                // Notify organizer about newly ingested media files so it can
+                // adopt orphan files into the user's folder and refresh viewers.
+                // Spawned as a separate task to avoid blocking the msg_relay loop.
+                if matches!(m.topic, UserMessageTopic::MediaFileAdded) {
+                    if let (Some(ref user_id), Some(ref media_file_id)) = (&m.user_id, &m.media_file_id) {
+                        tracing::debug!(user=user_id.as_str(), media_file=media_file_id.as_str(), "MediaFileAdded: notifying organizer about ingested file");
+                        metrics::counter!("on_media_file_ingested.attempt").increment(1);
+                        if let Some(ref uri) = server_state.organizer_uri {
+                            if server_state.organizer_has_connected.load(Relaxed) {
+                                let uri = uri.clone();
+                                let user_id = user_id.clone();
+                                let media_file_id = media_file_id.clone();
+                                tokio::spawn(async move {
+                                    match crate::grpc::grpc_client::connect(uri).await {
+                                        Ok(mut org) => {
+                                            let req = proto::org::OnMediaFileIngestedRequest { user_id, media_file_id };
+                                            if let Err(e) = org.on_media_file_ingested(req).await {
+                                                if e.code() != tonic::Code::Unimplemented {
+                                                    tracing::error!(err=?e, "Error in organizer on_media_file_ingested() call");
+                                                }
+                                            }
+                                        },
+                                        Err(e) => tracing::error!(err=?e, "Failed to connect to organizer for on_media_file_ingested"),
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
 
                 // Message to a single user
                 // Save it to the database, marking it as seen if sending it to the user succeeds

@@ -2099,7 +2099,7 @@ async def org_test__viewer_notifications(oi: organizer.OrganizerInbound):
         dbs.commit()
 
     ses_a = org.UserSessionData(sid="notif_sid_a", user=clap.UserInfo(id="viewer_notif.user_a", name="User A"), is_admin=False, cookies={})
-    ses_b = org.UserSessionData(sid="notif_sid_b", user=clap.UserInfo(id="viewer_notif.user_b", name="User B"), is_admin=False, cookies={})
+    ses_b = org.UserSessionData(sid="notif_sid_b", user=clap.UserInfo(id="viewer_notif.user_b", name="User B"), is_admin=True, cookies={})
 
     # Both sessions navigate to their respective root folders to get them created
     await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=ses_a))
@@ -2113,8 +2113,9 @@ async def org_test__viewer_notifications(oi: organizer.OrganizerInbound):
     ses_b.cookies[PATH_COOKIE_NAME] = json.dumps([root_fld_a.id])
 
     # Navigate both sessions to A's root folder to register them as viewers
-    await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=ses_a))
-    await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=ses_b))
+    page_id_a = str(root_fld_a.id)
+    await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=ses_a, page_id=page_id_a))
+    await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=ses_b, page_id=page_id_a))
 
     # Intercept client_show_page calls
     show_page_calls: list[org.ClientShowPageRequest] = []
@@ -2149,3 +2150,70 @@ async def org_test__viewer_notifications(oi: organizer.OrganizerInbound):
     assert not any(r.sid == "notif_sid_a" for r in hint_pages), "ses_a must NOT receive the empty hint"
 
     print("Viewer notification tests passed.")
+
+
+async def org_test__on_media_file_ingested(oi: organizer.OrganizerInbound):
+    """
+    on_media_file_ingested() -- Verify that when the server notifies the organizer about
+    a newly ingested file, the file is adopted into the user's root folder and viewers
+    of that folder receive a refresh hint.
+    """
+    from organizer.database.models import DbFolderItems
+
+    # Create a user and their root folder
+    with oi.db_new_session() as dbs:
+        dbs.add(DbUser(id="ingest_test.user", name="Ingest User"))
+        dbs.commit()
+
+    ses = org.UserSessionData(sid="ingest_sid", user=clap.UserInfo(id="ingest_test.user", name="Ingest User"), is_admin=False, cookies={})
+    await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=ses))
+
+    folder_path, _ = await oi.folders_helper.get_current_folder_path(ses, None)
+    root_folder = folder_path[-1]
+
+    # Insert an orphan media file (in media_files table but NOT in bf_folder_items)
+    with oi.db_new_session() as dbs:
+        dbs.add(DbMediaFile(id="aabbccdd0011", user_id="ingest_test.user", media_type="video",
+                            total_frames=100, duration=10.0, fps=10.0, raw_metadata_all="{}",
+                            orig_filename="test.mp4", recompression_done=None, title="Orphan Video"))
+        dbs.commit()
+
+    # Verify the file is NOT yet in any folder
+    with oi.db_new_session() as dbs:
+        in_folder = dbs.query(DbFolderItems).filter(DbFolderItems.media_file_id == "aabbccdd0011").count()
+        assert in_folder == 0, f"Orphan file should not be in any folder yet, but found {in_folder} entries"
+
+    # Register another session as a viewer of the root folder
+    ses_observer = org.UserSessionData(sid="observer_sid", user=clap.UserInfo(id="ingest_test.user", name="Ingest User"), is_admin=False, cookies={})
+    page_id = str(root_folder.id)
+    await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=ses_observer, page_id=page_id))
+
+    # Intercept client_show_page calls
+    show_page_calls: list[org.ClientShowPageRequest] = []
+    orig_show_page = oi.srv.client_show_page
+
+    async def _mock_show_page(self, req: org.ClientShowPageRequest) -> clap.Empty:
+        show_page_calls.append(req)
+        return clap.Empty()
+
+    setattr(oi.srv, "client_show_page", MethodType(_mock_show_page, oi.srv))
+    try:
+        # Simulate the server calling on_media_file_ingested
+        await oi.on_media_file_ingested(org.OnMediaFileIngestedRequest(
+            user_id="ingest_test.user", media_file_id="aabbccdd0011"))
+    finally:
+        setattr(oi.srv, "client_show_page", orig_show_page)
+
+    # Verify the orphan file was adopted into the root folder
+    with oi.db_new_session() as dbs:
+        in_folder = dbs.query(DbFolderItems).filter(
+            DbFolderItems.media_file_id == "aabbccdd0011",
+            DbFolderItems.folder_id == root_folder.id).count()
+        assert in_folder == 1, f"Orphan file should be adopted into root folder, but found {in_folder} entries"
+
+    # Verify the observer received a refresh hint (empty ShowPage)
+    print(f"ShowPage calls: {[(r.sid, len(r.page_items)) for r in show_page_calls]}")
+    assert any(r.sid == "observer_sid" and not r.page_items for r in show_page_calls), \
+        "Observer should receive an empty ShowPage refresh hint"
+
+    print("on_media_file_ingested tests passed.")

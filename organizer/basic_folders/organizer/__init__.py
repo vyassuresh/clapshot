@@ -1,5 +1,6 @@
 import json
 from logging import Logger
+from typing import Optional
 
 import clapshot_grpc.proto.clapshot as clap
 import clapshot_grpc.proto.clapshot.organizer as org
@@ -47,7 +48,7 @@ class OrganizerInbound(org.OrganizerInboundBase):
         self.metaplugin_loader = mp.MetaPluginLoader(METAPLUGINS_DIR, logger)
         self.metaplugin_loader.load_plugins()
 
-    async def notify_folder_viewers(self, folder_id: int, exclude_sid: str) -> None:
+    async def notify_folder_viewers(self, folder_id: int, exclude_sid: Optional[str]) -> None:
         """Send an empty ShowPage (refresh hint) to all sessions viewing folder_id, except exclude_sid."""
         for sid in self.folder_viewer_tracker.get_other_viewers(folder_id, exclude_sid):
             try:
@@ -79,7 +80,7 @@ class OrganizerInbound(org.OrganizerInboundBase):
         self.log.debug(f"Got handshake. Server info: {json.dumps(server_info.to_dict())}")
         self.server_info = server_info
 
-        srv_dep = org.OrganizerDependency(name="clapshot.server", min_ver=org.SemanticVersionNumber(major=0, minor=6, patch=0))
+        srv_dep = org.OrganizerDependency(name="clapshot.server", min_ver=org.SemanticVersionNumber(major=0, minor=10, patch=0))
         self.srv = await connect_back_to_server(server_info, MODULE_NAME, VERSION.split("."), "Basic folders for the UI", [srv_dep], self.log)
 
         debug_sql = False  # set to True to log all SQL queries
@@ -125,6 +126,28 @@ class OrganizerInbound(org.OrganizerInboundBase):
     @organizer_grpc_handler
     async def authz_user_action(self, authz_user_action_request: org.AuthzUserActionRequest) -> org.AuthzResponse:
         return await authz_user_action_impl(self, authz_user_action_request)
+
+
+    # Server lifecycle events
+
+    @override
+    @organizer_grpc_handler
+    async def on_media_file_ingested(self, req: org.OnMediaFileIngestedRequest) -> clap.Empty:
+        from .database.operations import db_get_or_create_user_root_folder
+        from .database.models import DbUser
+
+        with self.db_new_session() as dbs:
+            user = dbs.query(DbUser).filter(DbUser.id == req.user_id).one_or_none()
+            if not user:
+                self.log.warning(f"on_media_file_ingested: user '{req.user_id}' not found, skipping folder adoption")
+                return clap.Empty()
+            root_folder = await db_get_or_create_user_root_folder(
+                dbs, clap.UserInfo(id=user.id, name=user.name), self.srv, self.log)
+            root_folder_id = root_folder.id
+            dbs.commit()
+
+        await self.notify_folder_viewers(root_folder_id, exclude_sid=None)
+        return clap.Empty()
 
 
     # Folder operation methods
