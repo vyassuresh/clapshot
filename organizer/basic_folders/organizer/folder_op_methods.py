@@ -83,6 +83,13 @@ async def move_to_folder_impl(oi: organizer.OrganizerInbound, req: org.MoveToFol
     # Update page to view the opened folder (after transaction commit!)
     page = await oi.pages_helper.construct_navi_page(req.ses, None)
     await oi.srv.client_show_page(page)
+
+    # Notify other viewers of the destination folder (and source folder, if different)
+    await oi.notify_folder_viewers(dst_folder.id, exclude_sid=req.ses.sid)
+    src_folder_id_str = req.listing_data.get("folder_id")
+    if src_folder_id_str and int(src_folder_id_str) != dst_folder.id:
+        await oi.notify_folder_viewers(int(src_folder_id_str), exclude_sid=req.ses.sid)
+
     return clap.Empty()
 
 
@@ -274,7 +281,8 @@ async def reorder_items_impl(oi: organizer.OrganizerInbound, req: org.ReorderIte
                         if cnt == 0:
                             oi.log.warning(f"DB inconsistency? Media file ID '{it.media_file_id}' not in folder '{parent_folder.id}. Reordering skipped'")
 
-                return clap.Empty()
+        await oi.notify_folder_viewers(int(parent_folder_id), exclude_sid=req.ses.sid)
+        return clap.Empty()
     else:
         raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "No folder ID in UI listing, cannot reorder")
 

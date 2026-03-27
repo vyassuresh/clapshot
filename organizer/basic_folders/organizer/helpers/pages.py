@@ -36,6 +36,8 @@ class PagesHelper:
         cur_folder = folder_path[-1]
         parent_folder = folder_path[-2] if len(folder_path) > 1 else None
 
+        if self.organizer_inbound:
+            self.organizer_inbound.folder_viewer_tracker.register(cur_folder.id, ses.sid)
 
         pg_items: list[clap.PageItem] = []
 

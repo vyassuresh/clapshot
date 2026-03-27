@@ -21,6 +21,7 @@ from .authz_methods import authz_user_action_impl
 from .helpers.folders import FoldersHelper
 from .helpers.pages import PagesHelper
 from .helpers.actiondefs import ActiondefsHelper
+from .helpers.viewer_tracker import FolderViewerTracker
 from . import metaplugin as mp
 
 
@@ -29,7 +30,6 @@ try:
 except ImportError:
     def override(func):  # type: ignore
         return func
-
 
 
 class OrganizerInbound(org.OrganizerInboundBase):
@@ -43,8 +43,17 @@ class OrganizerInbound(org.OrganizerInboundBase):
         self.log = logger
         self.debug = debug
         self.server_info = None  # Will be set during handshake
+        self.folder_viewer_tracker = FolderViewerTracker()
         self.metaplugin_loader = mp.MetaPluginLoader(METAPLUGINS_DIR, logger)
         self.metaplugin_loader.load_plugins()
+
+    async def notify_folder_viewers(self, folder_id: int, exclude_sid: str) -> None:
+        """Send an empty ShowPage (refresh hint) to all sessions viewing folder_id, except exclude_sid."""
+        for sid in self.folder_viewer_tracker.get_other_viewers(folder_id, exclude_sid):
+            try:
+                await self.srv.client_show_page(org.ClientShowPageRequest(sid=sid))
+            except Exception as e:
+                self.log.debug(f"notify_folder_viewers: failed to notify sid '{sid}': {e}")
 
 
     # Migration methods

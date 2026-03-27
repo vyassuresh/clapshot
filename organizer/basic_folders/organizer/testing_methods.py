@@ -2041,3 +2041,111 @@ async def org_test__admin_create_folder_in_user_context(oi: organizer.OrganizerI
 # - Common popup action bugs like accessing wrong data structures
 # Potential approaches: Python AST analysis of JS strings, or external validation tool
 # Would have caught the folder sharing bug (_action_args.folder?.id vs _action_args.listing_data?.folder_id)
+
+
+async def org_test__folder_viewer_tracker(oi: organizer.OrganizerInbound):
+    """
+    FolderViewerTracker -- Unit tests for the viewer tracking data structure.
+    """
+    from organizer.helpers.viewer_tracker import FolderViewerTracker
+
+    tracker = FolderViewerTracker()
+
+    # Basic register and retrieval
+    tracker.register(folder_id=1, sid="alice")
+    tracker.register(folder_id=1, sid="bob")
+    tracker.register(folder_id=2, sid="carol")
+
+    others = tracker.get_other_viewers(1, exclude_sid="alice")
+    assert others == ["bob"], f"Expected ['bob'], got {others}"
+
+    others = tracker.get_other_viewers(1, exclude_sid="bob")
+    assert others == ["alice"], f"Expected ['alice'], got {others}"
+
+    # Carol is in folder 2, not folder 1
+    others = tracker.get_other_viewers(1, exclude_sid=None)
+    assert set(others) == {"alice", "bob"}, f"Expected alice+bob, got {others}"
+
+    # Re-registering alice to folder 2 should remove her from folder 1
+    tracker.register(folder_id=2, sid="alice")
+    others = tracker.get_other_viewers(1, exclude_sid=None)
+    assert others == ["bob"], f"After re-register, folder 1 should only have bob, got {others}"
+    others = tracker.get_other_viewers(2, exclude_sid=None)
+    assert set(others) == {"carol", "alice"}, f"Folder 2 should have carol+alice, got {others}"
+
+    # Cap eviction: fill up to MAX_ENTRIES+1 and verify the oldest is gone
+    tiny_tracker = FolderViewerTracker()
+    tiny_tracker.MAX_ENTRIES = 3
+    tiny_tracker.register(folder_id=10, sid="s1")
+    tiny_tracker.register(folder_id=10, sid="s2")
+    tiny_tracker.register(folder_id=10, sid="s3")
+    tiny_tracker.register(folder_id=10, sid="s4")  # should evict s1 (oldest)
+    all_viewers = set(tiny_tracker.get_other_viewers(10, exclude_sid=None))
+    assert "s1" not in all_viewers, f"s1 should have been evicted, got {all_viewers}"
+    assert {"s2", "s3", "s4"} == all_viewers, f"Expected s2+s3+s4, got {all_viewers}"
+
+    print("FolderViewerTracker tests passed.")
+
+
+async def org_test__viewer_notifications(oi: organizer.OrganizerInbound):
+    """
+    notify_folder_viewers() -- Verify that after a folder mutation, an empty ShowPage hint
+    is sent to other sessions viewing the same folder, but NOT to the acting session.
+    """
+    # Create two independent users/sessions
+    with oi.db_new_session() as dbs:
+        dbs.add(DbUser(id="viewer_notif.user_a", name="User A"))
+        dbs.add(DbUser(id="viewer_notif.user_b", name="User B"))
+        dbs.commit()
+
+    ses_a = org.UserSessionData(sid="notif_sid_a", user=clap.UserInfo(id="viewer_notif.user_a", name="User A"), is_admin=False, cookies={})
+    ses_b = org.UserSessionData(sid="notif_sid_b", user=clap.UserInfo(id="viewer_notif.user_b", name="User B"), is_admin=False, cookies={})
+
+    # Both sessions navigate to their respective root folders to get them created
+    await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=ses_a))
+    await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=ses_b))
+
+    # Get user A's root folder and place both sessions there
+    folder_path_a, _ = await oi.folders_helper.get_current_folder_path(ses_a, None)
+    root_fld_a = folder_path_a[-1]
+
+    ses_a.cookies[PATH_COOKIE_NAME] = json.dumps([root_fld_a.id])
+    ses_b.cookies[PATH_COOKIE_NAME] = json.dumps([root_fld_a.id])
+
+    # Navigate both sessions to A's root folder to register them as viewers
+    await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=ses_a))
+    await organizer.navigate_page_impl(oi, org.NavigatePageRequest(ses=ses_b))
+
+    # Intercept client_show_page calls
+    show_page_calls: list[org.ClientShowPageRequest] = []
+    orig_show_page = oi.srv.client_show_page
+
+    async def _mock_show_page(self, req: org.ClientShowPageRequest) -> clap.Empty:
+        show_page_calls.append(req)
+        return clap.Empty()
+
+    setattr(oi.srv, "client_show_page", MethodType(_mock_show_page, oi.srv))
+    try:
+        # Session A creates a new folder — this is the mutation
+        await oi.cmd_from_client(org.CmdFromClientRequest(
+            ses=ses_a, cmd="new_folder", args='{"name": "New Folder"}'))
+    finally:
+        setattr(oi.srv, "client_show_page", orig_show_page)
+
+    # There should be exactly two ShowPage calls:
+    # 1. A full page for the acting user (ses_a) — has page_items
+    # 2. An empty hint for the other viewer (ses_b) — no page_items
+    sids_called = [r.sid for r in show_page_calls]
+    print(f"ShowPage calls: {[(r.sid, len(r.page_items)) for r in show_page_calls]}")
+
+    assert "notif_sid_a" in sids_called, "Acting user should get a full page refresh"
+    assert "notif_sid_b" in sids_called, "Other viewer should receive a refresh hint"
+
+    full_pages = [r for r in show_page_calls if r.page_items]
+    hint_pages = [r for r in show_page_calls if not r.page_items]
+
+    assert any(r.sid == "notif_sid_a" for r in full_pages), "ses_a should get a full page"
+    assert any(r.sid == "notif_sid_b" for r in hint_pages), "ses_b should get an empty hint (no page_items)"
+    assert not any(r.sid == "notif_sid_a" for r in hint_pages), "ses_a must NOT receive the empty hint"
+
+    print("Viewer notification tests passed.")

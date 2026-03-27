@@ -742,6 +742,13 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             }
             // showPage
             else if (cmd.showPage) {
+                // Empty showPage (no pageItems, no pageId) = refresh hint: folder contents may have changed
+                if (!cmd.showPage.pageItems?.length && !cmd.showPage.pageId) {
+                    if (!$mediaFileId) {
+                        wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
+                    }
+                    return;
+                }
                 const newPageId = cmd.showPage.pageId ?? null;  // turn undefined into null
                 console.debug("showPage. newPageId=", newPageId, "$curPageId=", $curPageId);
 

@@ -122,6 +122,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                 oi.log.debug(f"Folder {new_fld.id} ('{new_fld.title}') created & committed, refreshing client's page")
                 navi_page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
                 await oi.srv.client_show_page(navi_page)
+                await oi.notify_folder_viewers(parent_folder.id, exclude_sid=cmd.ses.sid)
             else:
                 oi.log.error("new_folder command missing 'name' argument")
                 raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "new_folder command missing 'name' argument")
@@ -194,6 +195,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             oi.log.debug(f"Renamed folder '{fld.id}' to '{fld.title}'")
             page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
             await oi.srv.client_show_page(page)
+            await oi.notify_folder_viewers(fld.id, exclude_sid=cmd.ses.sid)
 
         elif cmd.cmd == "trash_folder":
             args = parse_json_dict(cmd.args) # {"id": 123}
@@ -209,6 +211,10 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                     raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{folder_id}' not found")
                 await check_action_authorization(oi, "trash_folder", folder=fld, ses=cmd.ses)
 
+            # Remember parent folder for notifying other viewers
+            folder_path, _ = await oi.folders_helper.get_current_folder_path(cmd.ses, None)
+            parent_folder_id = folder_path[-2].id if len(folder_path) > 1 else folder_path[-1].id
+
             # Delete the folder and its contents, gather media file IDs to delete later (after transaction, to avoid DB locks)
             media_to_delete = []
             with oi.db_new_session() as dbs:
@@ -222,6 +228,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
 
             page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
             await oi.srv.client_show_page(page)
+            await oi.notify_folder_viewers(parent_folder_id, exclude_sid=cmd.ses.sid)
 
         elif cmd.cmd == "share_folder":
             args = parse_json_dict(cmd.args)
@@ -242,6 +249,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             # Update UI after transaction commit
             navi_page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
             await oi.srv.client_show_page(navi_page)
+            await oi.notify_folder_viewers(folder_id, exclude_sid=cmd.ses.sid)
 
             # Show message with share URL
             await try_send_user_message(oi.srv,
@@ -267,6 +275,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             # Update UI after transaction commit
             navi_page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
             await oi.srv.client_show_page(navi_page)
+            await oi.notify_folder_viewers(folder_id, exclude_sid=cmd.ses.sid)
 
             # Show success message
             if revoked:
@@ -296,6 +305,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             # Check if this is a batch cleanup request (folder_id = '*')
             if folder_id_str == "*":
                 # Batch cleanup all empty users (excluding the admin user who is performing the action)
+                cur_folder_id = (await oi.folders_helper.get_current_folder_path(cmd.ses, None))[-1].id
                 with oi.db_new_session() as dbs:
                     from .folder_op_methods import find_and_cleanup_empty_users
                     cleaned_count = await find_and_cleanup_empty_users(dbs, oi.log, exclude_user_id=cmd.ses.user.id)
@@ -304,6 +314,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                 # Update UI after transaction commit
                 navi_page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
                 await oi.srv.client_show_page(navi_page)
+                await oi.notify_folder_viewers(cur_folder_id, exclude_sid=cmd.ses.sid)
 
                 # Show result message
                 if cleaned_count > 0:
@@ -337,6 +348,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                 # Update UI after transaction commit
                 navi_page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
                 await oi.srv.client_show_page(navi_page)
+                await oi.notify_folder_viewers(folder_id, exclude_sid=cmd.ses.sid)
 
                 # Show result message
                 if was_deleted:
