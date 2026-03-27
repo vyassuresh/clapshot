@@ -1,3 +1,13 @@
+clapshot-server (0.10.0) unstable; urgency=low
+
+  * New feature: OnMediaFileIngestedRequest in server->organizer protocol,
+    enabling organizers to be notified about ingested media files
+  * Increase gRPC (Tonic) message size limit from 4MB to 32MB
+  * Add Debian 13 (Trixie) .deb build support
+  * Fix: Use JPEG fallback when WEBP thumbnails not supported (Safari)
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 27 Mar 2026 12:00:00 +0200
+
 clapshot-server (0.9.2) unstable; urgency=low
 
   * New feature: User-editable transcoding decision script (clapshot-transcode-decision)
