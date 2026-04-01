@@ -1,11 +1,15 @@
-ARG auth_variation=none
+ARG auth_variation=htadmin
 
-FROM debian:bookworm-slim AS base
+FROM ubuntu:24.04 AS base
+
+# Prevent installers from hanging
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system packages
-RUN apt-get -qy update
-RUN apt-get -qy install acl sudo logrotate python3 python3.11 >/dev/null
-RUN apt-get -qy install nginx >/dev/null
+RUN apt-get -qy update && apt-get -qy install \
+    acl sudo logrotate python3 nginx \
+    sqlite3 ffmpeg mediainfo jq gnupg2 wget git php-fpm \
+    >/dev/null
 
 # Add deb-multimedia repository (for a more recent ffmpeg)
 RUN apt-get -qy install gnupg2 wget
@@ -43,7 +47,7 @@ COPY test/docker-entry_no-auth.sh /root/docker-entry.sh
 # ------------- basic auth (with PHP htadmin for management) -------------
 
 FROM base AS base-git-php
-RUN apt-get -qy install git php8.2-fpm >/dev/null
+RUN apt-get -qy install git php-fpm >/dev/null
 RUN mkdir -p /run/php
 
 
