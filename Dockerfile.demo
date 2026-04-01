@@ -5,19 +5,13 @@ FROM ubuntu:24.04 AS base
 # Prevent installers from hanging
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system packages
+# Install system packages (Ubuntu 24.04 already has modern ffmpeg/sqlite)
 RUN apt-get -qy update && apt-get -qy install \
     acl sudo logrotate python3 nginx \
     sqlite3 ffmpeg mediainfo jq gnupg2 wget git php-fpm \
     >/dev/null
 
-# Add deb-multimedia repository (for a more recent ffmpeg)
-RUN apt-get -qy install gnupg2 wget
-RUN wget -q https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2024.9.1_all.deb
-RUN dpkg -i deb-multimedia-keyring_2024.9.1_all.deb
-RUN echo "deb https://www.deb-multimedia.org bookworm main non-free" > /etc/apt/sources.list.d/deb-multimedia.list
-RUN apt-get -qy update
-RUN apt-get -qy install sqlite3 ffmpeg mediainfo jq >/dev/null
+# REMOVED: deb-multimedia repository section (This was causing the conflict)
 
 # Add regular user (to match local user ID)
 ARG UID=1000
