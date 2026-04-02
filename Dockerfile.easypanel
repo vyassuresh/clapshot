@@ -1,75 +1,119 @@
-# ---------- stage 1: build deb packages ----------
+# ---------- build stage ----------
 FROM rustlang/rust:nightly-bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
-    git \
-    make \
-    jq \
-    npm \
-    protobuf-compiler \
     pkg-config \
     libssl-dev \
+    protobuf-compiler \
     libsqlite3-dev \
+    git \
     curl \
+    npm \
     >/dev/null
 
-WORKDIR /repo
+WORKDIR /build
 
 RUN git clone https://github.com/elonen/clapshot.git .
 
-# build .deb packages expected by Dockerfile.demo
-RUN make debian-docker
+# install buf
+RUN curl -L https://github.com/bufbuild/buf/releases/latest/download/buf-Linux-x86_64 \
+    -o /usr/local/bin/buf && chmod +x /usr/local/bin/buf
+
+# install ts-proto
+RUN npm install -g ts-proto
+
+# build rust server
+WORKDIR /build/server
+ENV RUSTC_BOOTSTRAP=1
+RUN cargo build --release
+
+# build organizer
+WORKDIR /build
+RUN find organizer -name Cargo.toml -execdir cargo build --release \;
+
+# generate protobuf types
+WORKDIR /build/protobuf
+RUN find . -name "generate-typescript.sh" -exec bash {} \;
+
+# build frontend
+WORKDIR /build/client
+RUN npm install
+RUN npm run build
 
 
 
-# ---------- stage 2: use official Dockerfile.demo ----------
+# ---------- runtime stage ----------
 FROM debian:bookworm
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get -qy update && apt-get -qy install \
-    acl sudo logrotate python3 nginx \
-    sqlite3 ffmpeg mediainfo jq gnupg2 wget git php-fpm \
+RUN apt-get update && apt-get install -y \
+    nginx \
+    ffmpeg \
+    mediainfo \
+    sqlite3 \
+    jq \
+    curl \
+    wget \
+    git \
+    python3 \
+    php-fpm \
     >/dev/null
 
 
-# create runtime user
-RUN groupadd -f docker --gid=1000
-RUN useradd -m docker --uid=1000 --gid=1000 || true
+RUN useradd -m docker || true
 
 RUN mkdir -p /mnt/clapshot-data
-RUN chown -R 1000:1000 /mnt/clapshot-data
+RUN chown -R docker:docker /mnt/clapshot-data
 
 
-# copy deb packages generated in stage 1
-COPY --from=builder /repo/dist_deb/*.deb /root/
+# copy binaries
+COPY --from=builder \
+    /build/server/target/release/clapshot-server \
+    /usr/local/bin/
 
-RUN dpkg -i /root/*.deb
+COPY --from=builder \
+    /build/organizer/basic_folder \
+    /opt/clapshot-organizer
+
+COPY --from=builder \
+    /build/client/dist \
+    /var/www/clapshot
 
 
-# nginx config (same as demo)
-RUN cp /usr/share/doc/clapshot-client/examples/clapshot+htadmin.nginx.conf \
-    /etc/nginx/sites-enabled/clapshot
-
-
-# install htadmin UI
-RUN git clone https://github.com/soster/htadmin.git
-RUN cp -r htadmin/app/htadmin /var/www/htadmin
-RUN chown -R www-data:www-data /var/www/htadmin
-
-RUN echo "admin:KURMbfRvhQPWs" > /var/www/.htpasswd
-RUN chown www-data:www-data /var/www/.htpasswd
+# nginx config
+RUN printf '%s\n' \
+'server {' \
+' listen 80;' \
+' root /var/www/clapshot;' \
+' index index.html;' \
+'' \
+' location / {' \
+'   try_files $uri $uri/ /index.html;' \
+' }' \
+'' \
+' location /api {' \
+'   proxy_pass http://127.0.0.1:8080;' \
+' }' \
+'}' \
+> /etc/nginx/sites-enabled/default
 
 
 # start script
-RUN wget -q -O /root/docker-entry.sh \
-    https://raw.githubusercontent.com/elonen/clapshot/master/test/docker-entry_htadmin.sh
+RUN printf '%s\n' \
+'#!/bin/bash' \
+'set -e' \
+'' \
+'/usr/local/bin/clapshot-server \\' \
+' --data-dir /mnt/clapshot-data \\' \
+' --organizer /opt/clapshot-organizer \\' \
+' --host 0.0.0.0 \\' \
+' --port 8080 &' \
+'' \
+'nginx -g "daemon off;"' \
+> /start.sh
 
-RUN chmod +x /root/docker-entry.sh
+RUN chmod +x /start.sh
 
-
-WORKDIR /mnt/clapshot-data
 
 EXPOSE 80
 
-CMD ["bash", "/root/docker-entry.sh"]
+CMD ["/start.sh"]
