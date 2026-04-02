@@ -1,4 +1,3 @@
-# ---------- build stage ----------
 FROM rustlang/rust:nightly-bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
@@ -9,31 +8,37 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     npm \
+    make \
+    jq \
     >/dev/null
 
 WORKDIR /build
 
 RUN git clone https://github.com/elonen/clapshot.git .
 
+WORKDIR /build
+
 # install buf
 RUN curl -L https://github.com/bufbuild/buf/releases/latest/download/buf-Linux-x86_64 \
     -o /usr/local/bin/buf && chmod +x /usr/local/bin/buf
 
-# install ts-proto
+# install ts proto plugin
 RUN npm install -g ts-proto
+
+# generate protobuf files (correct way)
+RUN make protobuf
+
 
 # build rust server
 WORKDIR /build/server
 ENV RUSTC_BOOTSTRAP=1
 RUN cargo build --release
 
+
 # build organizer
 WORKDIR /build
 RUN find organizer -name Cargo.toml -execdir cargo build --release \;
 
-# generate protobuf types
-WORKDIR /build/protobuf
-RUN find . -name "generate-typescript.sh" -exec bash {} \;
 
 # build frontend
 WORKDIR /build/client
@@ -42,7 +47,7 @@ RUN npm run build
 
 
 
-# ---------- runtime stage ----------
+# ---------- runtime ----------
 FROM debian:bookworm
 
 RUN apt-get update && apt-get install -y \
@@ -65,7 +70,6 @@ RUN mkdir -p /mnt/clapshot-data
 RUN chown -R docker:docker /mnt/clapshot-data
 
 
-# copy binaries
 COPY --from=builder \
     /build/server/target/release/clapshot-server \
     /usr/local/bin/
@@ -79,7 +83,6 @@ COPY --from=builder \
     /var/www/clapshot
 
 
-# nginx config
 RUN printf '%s\n' \
 'server {' \
 ' listen 80;' \
@@ -97,7 +100,6 @@ RUN printf '%s\n' \
 > /etc/nginx/sites-enabled/default
 
 
-# start script
 RUN printf '%s\n' \
 '#!/bin/bash' \
 'set -e' \
@@ -110,6 +112,7 @@ RUN printf '%s\n' \
 '' \
 'nginx -g "daemon off;"' \
 > /start.sh
+
 
 RUN chmod +x /start.sh
 
