@@ -1,6 +1,6 @@
 ARG auth_variation=htadmin
 
-FROM ubuntu:24.04 AS base
+FROM debian:bookworm AS base
 
 # Prevent installers from hanging
 ENV DEBIAN_FRONTEND=noninteractive
